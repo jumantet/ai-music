@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum ContactType {
+  BLOG
+  RADIO
+  PLAYLIST
+  JOURNALIST
+}
+
+enum OutreachStatus {
+  NOT_CONTACTED
+  SENT
+  REPLIED
+  FEATURED
+}
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  name             String
+  password         String
+  plan             Plan      @default(FREE)
+  stripeCustomerId String?
+  emailVerified    Boolean   @default(false)
+  verifyToken      String?   @unique
+  releases         Release[]
+  contacts         Contact[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model Release {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  artistName  String
+  genre       String?
+  mood        String?
+  bpm         Float?
+  trackUrl    String?
+  coverUrl    String?
+  city        String?
+  influences  String?
+  shortBio    String?
+  epkPage     EPKPage?
+  pressKit    PressKit?
+  outreaches  Outreach[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model EPKPage {
+  id                 String   @id @default(cuid())
+  releaseId          String   @unique
+  release            Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  slug               String   @unique
+  bio                String?  @db.Text
+  pressPitch         String?  @db.Text
+  shortBio           String?  @db.Text
+  releaseDescription String?  @db.Text
+  isPublished        Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model PressKit {
+  id          String   @id @default(cuid())
+  releaseId   String   @unique
+  release     Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  zipUrl      String
+  generatedAt DateTime @default(now())
+}
+
+model Contact {
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  email      String
+  type       ContactType
+  website    String?
+  notes      String?     @db.Text
+  outreaches Outreach[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Outreach {
+  id        String         @id @default(cuid())
+  contactId String
+  contact   Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  releaseId String
+  release   Release        @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  subject   String
+  body      String         @db.Text
+  status    OutreachStatus @default(NOT_CONTACTED)
+  sentAt    DateTime?
+  repliedAt DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}

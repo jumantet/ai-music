@@ -1,0 +1,194 @@
+import React, { useMemo } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Linking,
+} from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { useQuery, useMutation } from '@apollo/client';
+import { Ionicons } from '@expo/vector-icons';
+import { ME_QUERY } from '../../src/graphql/queries';
+import {
+  CREATE_STRIPE_CHECKOUT_MUTATION,
+  CREATE_STRIPE_PORTAL_MUTATION,
+} from '../../src/graphql/mutations';
+import { useAuth } from '../../src/hooks/useAuth';
+import { useTheme } from '../../src/hooks/useTheme';
+import { Button, Card, Badge, UnverifiedBanner } from '../../src/components/ui';
+import { spacing, fontSize, radius, fonts } from '../../src/theme';
+import type { ColorPalette } from '../../src/theme';
+
+const PRO_FEATURES = [
+  'Unlimited releases',
+  'Unlimited EPK pages',
+  'Unlimited outreach emails',
+  'Press kit generation',
+  'Priority AI generation',
+  'Email sending via Resend',
+];
+
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    container: { padding: spacing.xl, gap: spacing.xl, maxWidth: 640, width: '100%', alignSelf: 'center' },
+
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    titleAccent: { width: 4, height: 28, borderRadius: 2, backgroundColor: colors.primary },
+    title: { fontFamily: fonts.extraBold, fontSize: fontSize.xxxl, color: colors.textPrimary },
+
+    successBanner: {
+      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+      backgroundColor: colors.successBg, borderRadius: radius.md,
+      padding: spacing.md, borderWidth: 1, borderColor: colors.success,
+    },
+    successText: { color: colors.success, fontSize: fontSize.sm, flex: 1, fontFamily: fonts.regular },
+
+    sectionTitle: { fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary, marginBottom: spacing.md },
+    accountRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    avatar: {
+      width: 48, height: 48, borderRadius: radius.full,
+      backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+    },
+    avatarText: { color: colors.textInverse, fontFamily: fonts.bold, fontSize: fontSize.lg },
+    accountInfo: { flex: 1 },
+    accountName: { fontFamily: fonts.semiBold, fontSize: fontSize.md, color: colors.textPrimary },
+    accountEmail: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary },
+
+    // Pro upgrade card — blue accents
+    upgradeCard: { borderColor: colors.primary, borderWidth: 2 },
+    upgradeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md },
+    upgradeTitle: { fontFamily: fonts.bold, fontSize: fontSize.xl, color: colors.textPrimary },
+    upgradePrice: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textSecondary, marginTop: 4 },
+    priceHighlight: { color: colors.primary, fontFamily: fonts.bold },
+    proStarBadge: {
+      backgroundColor: colors.primaryBg,
+      borderRadius: radius.full,
+      paddingLeft: spacing.sm, paddingRight: spacing.sm,
+      paddingTop: spacing.xs, paddingBottom: spacing.xs,
+      borderWidth: 1, borderColor: colors.primary,
+    },
+    proStarText: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.primary },
+    featureList: { gap: spacing.sm },
+    featureItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    featureText: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textPrimary },
+
+    proBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+    proTitle: { fontFamily: fonts.bold, fontSize: fontSize.xl, color: colors.textPrimary },
+    proSubtitle: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textSecondary },
+
+    aboutList: { gap: spacing.sm },
+    aboutRow: { flexDirection: 'row', justifyContent: 'space-between' },
+    aboutLabel: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
+    aboutValue: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textPrimary },
+  });
+
+function AboutRow({ label, value, styles }: { label: string; value: string; styles: ReturnType<typeof makeStyles> }) {
+  return (
+    <View style={styles.aboutRow}>
+      <Text style={styles.aboutLabel}>{label}</Text>
+      <Text style={styles.aboutValue}>{value}</Text>
+    </View>
+  );
+}
+
+export default function SettingsScreen() {
+  const { upgraded } = useLocalSearchParams<{ upgraded?: string }>();
+  const { user, logout } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { data } = useQuery(ME_QUERY);
+  const [createCheckout, { loading: checkoutLoading }] = useMutation(CREATE_STRIPE_CHECKOUT_MUTATION);
+  const [createPortal, { loading: portalLoading }] = useMutation(CREATE_STRIPE_PORTAL_MUTATION);
+
+  const plan = data?.me?.plan ?? user?.plan ?? 'FREE';
+
+  async function handleUpgrade() {
+    try {
+      const { data } = await createCheckout();
+      await Linking.openURL(data.createStripeCheckout);
+    } catch (e) { alert((e as Error).message); }
+  }
+
+  async function handleManageBilling() {
+    try {
+      const { data } = await createPortal();
+      await Linking.openURL(data.createStripePortal);
+    } catch (e) { alert((e as Error).message); }
+  }
+
+  return (
+    <ScrollView style={styles.root} contentContainerStyle={styles.container}>
+      <Text style={styles.title}>Settings</Text>
+
+      {user && !user.emailVerified && <UnverifiedBanner />}
+
+      {upgraded === 'true' && (
+        <View style={styles.successBanner}>
+          <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+          <Text style={styles.successText}>Welcome to Pro! Your account has been upgraded.</Text>
+        </View>
+      )}
+
+      <Card padding="lg">
+        <Text style={styles.sectionTitle}>Account</Text>
+        <View style={styles.accountRow}>
+          {/* Avatar in red */}
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{(user?.name ?? 'U').charAt(0).toUpperCase()}</Text>
+          </View>
+          <View style={styles.accountInfo}>
+            <Text style={styles.accountName}>{user?.name}</Text>
+            <Text style={styles.accountEmail}>{user?.email}</Text>
+          </View>
+          <Badge label={plan} variant={plan === 'PRO' ? 'warning' : 'default'} />
+        </View>
+        <Button label="Sign out" onPress={logout} variant="ghost" style={{ marginTop: spacing.md }} />
+      </Card>
+
+      {plan === 'FREE' ? (
+        /* Gold-bordered upgrade card */
+        <Card padding="lg" style={styles.upgradeCard}>
+          <View style={styles.upgradeHeader}>
+            <View>
+              <Text style={styles.upgradeTitle}>Upgrade to Pro</Text>
+              <Text style={styles.upgradePrice}>
+                From <Text style={styles.priceHighlight}>€12/month</Text>
+              </Text>
+            </View>
+            <View style={styles.proStarBadge}>
+              <Text style={styles.proStarText}>★ PRO</Text>
+            </View>
+          </View>
+          <View style={styles.featureList}>
+            {PRO_FEATURES.map((feature) => (
+              <View key={feature} style={styles.featureItem}>
+                  <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                <Text style={styles.featureText}>{feature}</Text>
+              </View>
+            ))}
+          </View>
+          <Button label="Upgrade to Pro →" onPress={handleUpgrade} loading={checkoutLoading} fullWidth size="lg" style={{ marginTop: spacing.md }} />
+        </Card>
+      ) : (
+        <Card padding="lg">
+          <View style={styles.proBadgeRow}>
+            <Ionicons name="star" size={24} color={colors.primary} />
+            <Text style={styles.proTitle}>You're on Pro</Text>
+          </View>
+          <Text style={styles.proSubtitle}>Enjoy unlimited releases, EPK pages, and outreach emails.</Text>
+          <Button label="Manage Billing" onPress={handleManageBilling} loading={portalLoading} variant="secondary" style={{ marginTop: spacing.md }} />
+        </Card>
+      )}
+
+      <Card padding="lg">
+        <Text style={styles.sectionTitle}>About</Text>
+        <View style={styles.aboutList}>
+          <AboutRow label="Version" value="1.0.0" styles={styles} />
+          <AboutRow label="Stack" value="Expo · Apollo · PostgreSQL" styles={styles} />
+        </View>
+      </Card>
+    </ScrollView>
+  );
+}
