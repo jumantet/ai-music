@@ -15,26 +15,33 @@ import { ME_QUERY } from '../../src/graphql/queries';
 import { Button, Card, Badge, UnverifiedBanner } from '../../src/components/ui';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/hooks/useTheme';
+import { useIsMobile } from '../../src/hooks/useIsMobile';
 import { spacing, fontSize, radius, fonts } from '../../src/theme';
 import type { ColorPalette } from '../../src/theme';
 import type { Release } from '@toolkit/shared';
 
-const makeStyles = (colors: ColorPalette) =>
+const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bgCard },
-    container: { padding: spacing.xl, gap: spacing.xl, maxWidth: 900, width: '100%', alignSelf: 'center' },
+    container: {
+      padding: isMobile ? spacing.md : spacing.xl,
+      gap: isMobile ? spacing.lg : spacing.xl,
+      maxWidth: 900,
+      width: '100%',
+      alignSelf: 'center',
+    },
 
-    // Hero greeting — more space, friendly
+    // Hero greeting
     hero: {
       backgroundColor: colors.primary,
       borderRadius: radius.xl,
-      padding: spacing.xl,
-      flexDirection: 'row',
-      alignItems: 'center',
+      padding: isMobile ? spacing.lg : spacing.xl,
+      flexDirection: isMobile ? 'column' : 'row',
+      alignItems: isMobile ? 'flex-start' : 'center',
       justifyContent: 'space-between',
       gap: spacing.lg,
     },
-    heroLeft: { flex: 1 },
+    heroLeft: { flex: isMobile ? 0 : 1 },
     heroEyebrow: {
       fontFamily: fonts.semiBold,
       fontSize: fontSize.sm,
@@ -44,9 +51,9 @@ const makeStyles = (colors: ColorPalette) =>
     },
     heroTitle: {
       fontFamily: fonts.extraBold,
-      fontSize: fontSize.xxxl,
+      fontSize: isMobile ? fontSize.xxl : fontSize.xxxl,
       color: colors.white,
-      lineHeight: 38,
+      lineHeight: isMobile ? 30 : 38,
     },
     heroSubtitle: {
       fontFamily: fonts.regular,
@@ -62,6 +69,7 @@ const makeStyles = (colors: ColorPalette) =>
       paddingBottom: spacing.sm + 2,
       borderRadius: radius.full,
       flexShrink: 0,
+      alignSelf: isMobile ? 'flex-start' : 'auto',
     },
     heroBtnText: {
       fontFamily: fonts.bold,
@@ -70,7 +78,11 @@ const makeStyles = (colors: ColorPalette) =>
     },
 
     // Stats row
-    statsRow: { flexDirection: 'row', gap: spacing.md },
+    statsRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      flexWrap: isMobile ? 'wrap' : 'nowrap',
+    },
     statCard: { flex: 1, alignItems: 'center', paddingTop: spacing.lg, paddingBottom: spacing.lg, gap: spacing.xs, overflow: 'hidden' },
     statStrip: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
     statValue: { fontFamily: fonts.extraBold, fontSize: 36, lineHeight: 44 },
@@ -89,7 +101,11 @@ const makeStyles = (colors: ColorPalette) =>
       borderWidth: 1.5,
       backgroundColor: colors.primaryBg,
     },
-    upgradeInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    upgradeInner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+    },
     upgradeIconBox: {
       width: 44,
       height: 44,
@@ -99,9 +115,10 @@ const makeStyles = (colors: ColorPalette) =>
       justifyContent: 'center',
       flexShrink: 0,
     },
-    upgradeLeft: { flex: 1 },
+    upgradeLeft: { flex: 1, gap: spacing.xs },
     upgradeTitle: { fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.textPrimary },
-    upgradeSubtitle: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+    upgradeSubtitle: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary },
+    upgradeBtn: { marginTop: spacing.xs, alignSelf: 'flex-start' },
 
     // Section
     section: { gap: spacing.md },
@@ -167,7 +184,8 @@ function StatCard({ label, value, icon, accentColor }: {
 
 function ReleaseRow({ release, colors }: { release: Release; colors: ColorPalette }) {
   const { t } = useTranslation();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isMobile = useIsMobile();
+  const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
   return (
     <Link href={`/(app)/releases/${release.id}` as any} asChild>
       <TouchableOpacity>
@@ -202,7 +220,8 @@ export default function DashboardScreen() {
   const { user: authUser } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isMobile = useIsMobile();
+  const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
 
   const user = data?.me;
   const releases: Release[] = user?.releases ?? [];
@@ -238,12 +257,12 @@ export default function DashboardScreen() {
             <View style={styles.upgradeLeft}>
               <Text style={styles.upgradeTitle}>{t('dashboard.upgradeBannerTitle')}</Text>
               <Text style={styles.upgradeSubtitle}>{t('dashboard.upgradeBannerSubtitle')}</Text>
+              <Link href="/(app)/settings" asChild>
+                <TouchableOpacity style={styles.upgradeBtn}>
+                  <Button label={t('dashboard.upgradeButton')} onPress={() => {}} size="sm" />
+                </TouchableOpacity>
+              </Link>
             </View>
-            <Link href="/(app)/settings" asChild>
-              <TouchableOpacity>
-                <Button label={t('dashboard.upgradeButton')} onPress={() => {}} size="sm" />
-              </TouchableOpacity>
-            </Link>
           </View>
         </Card>
       )}

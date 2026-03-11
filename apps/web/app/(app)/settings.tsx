@@ -17,6 +17,7 @@ import {
 } from '../../src/graphql/mutations';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/hooks/useTheme';
+import { useIsMobile } from '../../src/hooks/useIsMobile';
 import { Button, Card, Badge, UnverifiedBanner } from '../../src/components/ui';
 import { spacing, fontSize, radius, fonts } from '../../src/theme';
 import type { ColorPalette } from '../../src/theme';
@@ -30,14 +31,24 @@ const PRO_FEATURE_KEYS = [
   'settings.featureEmailSending',
 ];
 
-const makeStyles = (colors: ColorPalette) =>
+const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
-    container: { padding: spacing.xl, gap: spacing.xl, maxWidth: 640, width: '100%', alignSelf: 'center' },
+    container: {
+      padding: isMobile ? spacing.md : spacing.xl,
+      gap: isMobile ? spacing.lg : spacing.xl,
+      maxWidth: 640,
+      width: '100%',
+      alignSelf: 'center',
+    },
 
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     titleAccent: { width: 4, height: 28, borderRadius: 2, backgroundColor: colors.primary },
-    title: { fontFamily: fonts.extraBold, fontSize: fontSize.xxxl, color: colors.textPrimary },
+    title: {
+      fontFamily: fonts.extraBold,
+      fontSize: isMobile ? fontSize.xxl : fontSize.xxxl,
+      color: colors.textPrimary,
+    },
 
     successBanner: {
       flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
@@ -99,7 +110,8 @@ export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isMobile = useIsMobile();
+  const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
   const { data } = useQuery(ME_QUERY);
   const [createCheckout, { loading: checkoutLoading }] = useMutation(CREATE_STRIPE_CHECKOUT_MUTATION);
   const [createPortal, { loading: portalLoading }] = useMutation(CREATE_STRIPE_PORTAL_MUTATION);

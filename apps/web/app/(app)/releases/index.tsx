@@ -15,18 +15,26 @@ import { ME_QUERY } from '../../../src/graphql/queries';
 import { DELETE_RELEASE_MUTATION } from '../../../src/graphql/mutations';
 import { Button, Card, Badge } from '../../../src/components/ui';
 import { useTheme } from '../../../src/hooks/useTheme';
+import { useIsMobile } from '../../../src/hooks/useIsMobile';
 import { spacing, fontSize, radius, fonts } from '../../../src/theme';
 import type { ColorPalette } from '../../../src/theme';
 import type { Release } from '@toolkit/shared';
 
-const makeStyles = (colors: ColorPalette) =>
+const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
-    container: { padding: spacing.xl, gap: spacing.xl },
+    container: {
+      padding: isMobile ? spacing.md : spacing.xl,
+      gap: isMobile ? spacing.lg : spacing.xl,
+    },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     titleAccent: { width: 4, height: 28, borderRadius: 2, backgroundColor: colors.primary },
-    title: { fontFamily: fonts.extraBold, fontSize: fontSize.xxxl, color: colors.textPrimary },
+    title: {
+      fontFamily: fonts.extraBold,
+      fontSize: isMobile ? fontSize.xxl : fontSize.xxxl,
+      color: colors.textPrimary,
+    },
     limitBox: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -60,7 +68,8 @@ const makeStyles = (colors: ColorPalette) =>
 export default function ReleasesScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isMobile = useIsMobile();
+  const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
   const { data, loading } = useQuery(ME_QUERY);
 
   const releases: Release[] = data?.me?.releases ?? [];

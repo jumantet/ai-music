@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Modal,
 } from 'react-native';
+import { useIsMobile } from '../../src/hooks/useIsMobile';
 import { useQuery, useMutation } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -36,15 +37,27 @@ const TYPE_BADGE_VARIANT: Record<ContactType, 'info' | 'warning' | 'success' | '
   JOURNALIST: 'default',
 };
 
-const makeStyles = (colors: ColorPalette) =>
+const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
-    container: { padding: spacing.xl, gap: spacing.xl },
+    container: {
+      padding: isMobile ? spacing.md : spacing.xl,
+      gap: isMobile ? spacing.lg : spacing.xl,
+    },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     titleAccent: { width: 4, height: 28, borderRadius: 2, backgroundColor: colors.primary },
-    title: { fontFamily: fonts.extraBold, fontSize: fontSize.xxxl, color: colors.textPrimary },
-    filters: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+    title: {
+      fontFamily: fonts.extraBold,
+      fontSize: isMobile ? fontSize.xxl : fontSize.xxxl,
+      color: colors.textPrimary,
+    },
+    filtersScroll: { marginHorizontal: isMobile ? -spacing.md : 0 },
+    filtersContent: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      paddingHorizontal: isMobile ? spacing.md : 0,
+    },
     filterChip: {
       paddingLeft: spacing.md, paddingRight: spacing.md,
       paddingTop: spacing.xs + 2, paddingBottom: spacing.xs + 2,
@@ -189,7 +202,8 @@ function ContactFormModal({
 export default function ContactsScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isMobile = useIsMobile();
+  const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
   const { data, loading, refetch } = useQuery(CONTACTS_QUERY);
   const [deleteContact] = useMutation(DELETE_CONTACT_MUTATION, { refetchQueries: [CONTACTS_QUERY] });
   const [filterType, setFilterType] = useState<ContactType | 'ALL'>('ALL');
@@ -211,7 +225,12 @@ export default function ContactsScreen() {
         <Button label={t('contacts.addContact')} onPress={() => { setEditingContact(null); setShowForm(true); }} />
       </View>
 
-      <View style={styles.filters}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filtersScroll}
+        contentContainerStyle={styles.filtersContent}
+      >
         {(['ALL', 'BLOG', 'RADIO', 'PLAYLIST', 'JOURNALIST'] as const).map((type) => (
           <TouchableOpacity
             key={type}
@@ -224,7 +243,7 @@ export default function ContactsScreen() {
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {loading ? <Text style={styles.muted}>{t('common.loading')}</Text> : null}
 
