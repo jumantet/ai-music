@@ -1,12 +1,12 @@
-import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { usePathname, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useTranslation } from 'react-i18next';
-import { useAuth } from '../../hooks/useAuth';
-import { useTheme } from '../../hooks/useTheme';
-import { spacing, fontSize, radius, fonts } from '../../theme';
-import type { ColorPalette } from '../../theme';
+import React, { useMemo } from "react";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { usePathname, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
+import { useAuth } from "../../hooks/useAuth";
+import { useTheme } from "../../hooks/useTheme";
+import { spacing, fontSize, radius, fonts } from "../../theme";
+import type { ColorPalette } from "../../theme";
 
 interface NavItem {
   label: string;
@@ -17,10 +17,34 @@ interface NavItem {
 }
 
 const NAV_ITEMS_CONFIG = [
-  { key: 'sidebar.dashboard', path: '/dashboard', href: '/(app)/dashboard', icon: 'home-outline', activeIcon: 'home' },
-  { key: 'sidebar.releases', path: '/releases', href: '/(app)/releases', icon: 'musical-notes-outline', activeIcon: 'musical-notes' },
-  { key: 'sidebar.contacts', path: '/contacts', href: '/(app)/contacts', icon: 'people-outline', activeIcon: 'people' },
-  { key: 'sidebar.settings', path: '/settings', href: '/(app)/settings', icon: 'settings-outline', activeIcon: 'settings' },
+  {
+    key: "sidebar.dashboard",
+    path: "/dashboard",
+    href: "/(app)/dashboard",
+    icon: "home-outline",
+    activeIcon: "home",
+  },
+  {
+    key: "sidebar.releases",
+    path: "/releases",
+    href: "/(app)/releases",
+    icon: "musical-notes-outline",
+    activeIcon: "musical-notes",
+  },
+  {
+    key: "sidebar.contacts",
+    path: "/contacts",
+    href: "/(app)/contacts",
+    icon: "people-outline",
+    activeIcon: "people",
+  },
+  {
+    key: "sidebar.settings",
+    path: "/settings",
+    href: "/(app)/settings",
+    icon: "settings-outline",
+    activeIcon: "settings",
+  },
 ] as const;
 
 const makeStyles = (colors: ColorPalette) =>
@@ -34,13 +58,13 @@ const makeStyles = (colors: ColorPalette) =>
       paddingBottom: spacing.lg,
       paddingLeft: spacing.md,
       paddingRight: spacing.md,
-      justifyContent: 'space-between',
+      justifyContent: "space-between",
       flexShrink: 0,
     },
     top: { flex: 1 },
     logo: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: spacing.sm,
       paddingLeft: spacing.xs,
       marginBottom: spacing.xxl,
@@ -50,28 +74,38 @@ const makeStyles = (colors: ColorPalette) =>
       height: 38,
       borderRadius: radius.lg,
       backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     logoEmoji: { fontSize: 19 },
     logoTextBlock: { gap: 1 },
-    logoText: { fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.textPrimary, lineHeight: 18 },
-    logoTagline: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted, lineHeight: 13 },
+    logoText: {
+      fontFamily: fonts.bold,
+      fontSize: fontSize.md,
+      color: colors.textPrimary,
+      lineHeight: 18,
+    },
+    logoTagline: {
+      fontFamily: fonts.regular,
+      fontSize: 10,
+      color: colors.textMuted,
+      lineHeight: 13,
+    },
     nav: { gap: 2 },
     navItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: spacing.sm + 2,
       paddingTop: spacing.sm + 2,
       paddingBottom: spacing.sm + 2,
       paddingLeft: spacing.md,
       paddingRight: spacing.md,
       borderRadius: radius.md,
-      position: 'relative',
+      position: "relative",
     },
     navItemActive: { backgroundColor: colors.primaryBg },
     navActiveBar: {
-      position: 'absolute',
+      position: "absolute",
       left: 0,
       top: 6,
       bottom: 6,
@@ -79,12 +113,20 @@ const makeStyles = (colors: ColorPalette) =>
       borderRadius: 2,
       backgroundColor: colors.primary,
     },
-    navLabel: { fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textSecondary },
-    navLabelActive: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.primary },
+    navLabel: {
+      fontFamily: fonts.semiBold,
+      fontSize: fontSize.sm,
+      color: colors.textSecondary,
+    },
+    navLabelActive: {
+      fontFamily: fonts.bold,
+      fontSize: fontSize.sm,
+      color: colors.white,
+    },
     footer: {},
     userRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: spacing.sm,
       paddingTop: spacing.md,
       borderTopWidth: 1,
@@ -95,15 +137,31 @@ const makeStyles = (colors: ColorPalette) =>
       height: 34,
       borderRadius: radius.full,
       backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       flexShrink: 0,
     },
-    userAvatarText: { fontFamily: fonts.bold, color: colors.white, fontSize: fontSize.sm },
+    userAvatarText: {
+      fontFamily: fonts.bold,
+      color: colors.white,
+      fontSize: fontSize.sm,
+    },
     userInfo: { flex: 1, minWidth: 0 },
-    userName: { fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textPrimary },
-    planFree: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.textMuted },
-    planPro: { fontFamily: fonts.bold, fontSize: fontSize.xs, color: colors.primary },
+    userName: {
+      fontFamily: fonts.semiBold,
+      fontSize: fontSize.sm,
+      color: colors.textPrimary,
+    },
+    planFree: {
+      fontFamily: fonts.medium,
+      fontSize: fontSize.xs,
+      color: colors.textMuted,
+    },
+    planPro: {
+      fontFamily: fonts.bold,
+      fontSize: fontSize.xs,
+      color: colors.primary,
+    },
     logoutIcon: { padding: spacing.xs },
   });
 
@@ -123,18 +181,22 @@ export function Sidebar() {
             <Text style={styles.logoEmoji}>🎵</Text>
           </View>
           <View style={styles.logoTextBlock}>
-            <Text style={styles.logoText}>{t('sidebar.appName')}</Text>
-            <Text style={styles.logoTagline}>{t('sidebar.tagline')}</Text>
+            <Text style={styles.logoText}>{t("sidebar.appName")}</Text>
+            <Text style={styles.logoTagline}>{t("sidebar.tagline")}</Text>
           </View>
         </View>
 
         <View style={styles.nav}>
           {NAV_ITEMS_CONFIG.map((item) => {
-            const isActive = pathname === item.path || pathname.startsWith(item.path + '/');
+            const isActive =
+              pathname === item.path || pathname.startsWith(item.path + "/");
             return (
               <TouchableOpacity
                 key={item.href}
-                style={[styles.navItem, isActive ? styles.navItemActive : undefined]}
+                style={[
+                  styles.navItem,
+                  isActive ? styles.navItemActive : undefined,
+                ]}
                 onPress={() => router.push(item.href as any)}
                 activeOpacity={0.7}
               >
@@ -143,7 +205,9 @@ export function Sidebar() {
                   size={20}
                   color={isActive ? colors.primary : colors.textSecondary}
                 />
-                <Text style={isActive ? styles.navLabelActive : styles.navLabel}>
+                <Text
+                  style={isActive ? styles.navLabelActive : styles.navLabel}
+                >
                   {t(item.key)}
                 </Text>
               </TouchableOpacity>
@@ -156,16 +220,30 @@ export function Sidebar() {
         {user ? (
           <View style={styles.userRow}>
             <View style={styles.userAvatar}>
-              <Text style={styles.userAvatarText}>{user.name.charAt(0).toUpperCase()}</Text>
-            </View>
-            <View style={styles.userInfo}>
-              <Text style={styles.userName} numberOfLines={1}>{user.name}</Text>
-              <Text style={user.plan === 'PRO' ? styles.planPro : styles.planFree}>
-                {user.plan === 'PRO' ? t('common.pro') : t('common.freePlan')}
+              <Text style={styles.userAvatarText}>
+                {user.name.charAt(0).toUpperCase()}
               </Text>
             </View>
-            <TouchableOpacity onPress={logout} activeOpacity={0.7} style={styles.logoutIcon}>
-              <Ionicons name="log-out-outline" size={18} color={colors.textMuted} />
+            <View style={styles.userInfo}>
+              <Text style={styles.userName} numberOfLines={1}>
+                {user.name}
+              </Text>
+              <Text
+                style={user.plan === "PRO" ? styles.planPro : styles.planFree}
+              >
+                {user.plan === "PRO" ? t("common.pro") : t("common.freePlan")}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={logout}
+              activeOpacity={0.7}
+              style={styles.logoutIcon}
+            >
+              <Ionicons
+                name="log-out-outline"
+                size={18}
+                color={colors.textMuted}
+              />
             </TouchableOpacity>
           </View>
         ) : null}

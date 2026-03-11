@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useMutation } from '@apollo/client';
-import { useTranslation } from 'react-i18next';
-import { RESEND_VERIFICATION_MUTATION } from '../../graphql/mutations';
-import { useTheme } from '../../hooks/useTheme';
-import { spacing, fontSize, radius, fonts } from '../../theme';
-import type { ColorPalette } from '../../theme';
+import React, { useMemo, useState } from "react";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { useMutation } from "@apollo/client";
+import { useTranslation } from "react-i18next";
+import { RESEND_VERIFICATION_MUTATION } from "../../graphql/mutations";
+import { useTheme } from "../../hooks/useTheme";
+import { spacing, fontSize, radius, fonts } from "../../theme";
+import type { ColorPalette } from "../../theme";
 
 const makeStyles = (colors: ColorPalette) =>
   StyleSheet.create({
@@ -19,10 +19,10 @@ const makeStyles = (colors: ColorPalette) =>
       paddingLeft: spacing.md,
       paddingRight: spacing.md,
       marginBottom: spacing.lg,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: spacing.md,
-      flexWrap: 'wrap',
+      flexWrap: "wrap",
     },
     text: {
       fontFamily: fonts.regular,
@@ -33,8 +33,8 @@ const makeStyles = (colors: ColorPalette) =>
     link: {
       fontFamily: fonts.semiBold,
       fontSize: fontSize.sm,
-      color: colors.primary,
-      textDecorationLine: 'underline',
+      color: colors.white,
+      textDecorationLine: "underline",
     },
   });
 
@@ -57,11 +57,13 @@ export function UnverifiedBanner() {
   return (
     <View style={styles.banner}>
       <Text style={styles.text}>
-        {sent ? t('auth.unverifiedBanner.sent') : t('auth.unverifiedBanner.prompt')}
+        {sent
+          ? t("auth.unverifiedBanner.sent")
+          : t("auth.unverifiedBanner.prompt")}
       </Text>
       {!sent && (
         <TouchableOpacity onPress={handleResend}>
-          <Text style={styles.link}>{t('auth.unverifiedBanner.resend')}</Text>
+          <Text style={styles.link}>{t("auth.unverifiedBanner.resend")}</Text>
         </TouchableOpacity>
       )}
     </View>
