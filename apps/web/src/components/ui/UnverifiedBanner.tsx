@@ -43,14 +43,17 @@ export function UnverifiedBanner() {
   const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState(false);
   const [resend] = useMutation(RESEND_VERIFICATION_MUTATION);
 
   async function handleResend() {
+    setError(false);
     try {
       await resend();
       setSent(true);
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[UnverifiedBanner] resend failed:', err);
+      setError(true);
     }
   }
 
@@ -59,6 +62,8 @@ export function UnverifiedBanner() {
       <Text style={styles.text}>
         {sent
           ? t("auth.unverifiedBanner.sent")
+          : error
+          ? t("auth.unverifiedBanner.error", { defaultValue: "Failed to send email. Please try again." })
           : t("auth.unverifiedBanner.prompt")}
       </Text>
       {!sent && (

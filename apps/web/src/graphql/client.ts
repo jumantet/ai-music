@@ -7,6 +7,7 @@ import {
 import { setContext } from '@apollo/client/link/context';
 import { onError } from '@apollo/client/link/error';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { triggerForceLogout } from './authEvents';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000/graphql';
 
@@ -26,10 +27,19 @@ const authLink = setContext(async (_, { headers }) => {
   }
 });
 
+const AUTH_ERRORS = ['Authentication required', 'Invalid token', 'jwt expired'];
+
 const errorLink = onError(({ graphQLErrors, networkError }) => {
   if (graphQLErrors) {
     graphQLErrors.forEach(({ message }) => {
       console.warn('[GraphQL error]:', message);
+
+      const isAuthError = AUTH_ERRORS.some((e) => message.includes(e));
+      if (isAuthError) {
+        AsyncStorage.multiRemove(['auth_token', 'auth_user']).then(() => {
+          triggerForceLogout();
+        });
+      }
     });
   }
   if (networkError) {

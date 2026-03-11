@@ -2,7 +2,10 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_ADDRESS = 'AI Release Toolkit <noreply@epkpage.com>';
+const FROM_ADDRESS =
+  process.env.NODE_ENV === 'production'
+    ? 'AI Release Toolkit <noreply@epkpage.com>'
+    : 'AI Release Toolkit <onboarding@resend.dev>';
 
 export interface SendEmailOptions {
   to: string;

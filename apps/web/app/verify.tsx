@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { VERIFY_EMAIL_MUTATION } from '../src/graphql/mutations';
 import { Button } from '../src/components/ui';
 import { colors, spacing, fontSize, radius } from '../src/theme';
+import { useAuth } from '../src/hooks/useAuth';
 
 type State = 'loading' | 'success' | 'error';
 
@@ -22,6 +23,7 @@ export default function VerifyEmailScreen() {
   const [state, setState] = useState<State>('loading');
   const [errorMsg, setErrorMsg] = useState('');
 
+  const { updateUser } = useAuth();
   const [verifyEmail] = useMutation(VERIFY_EMAIL_MUTATION);
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export default function VerifyEmailScreen() {
       .then(async ({ data }) => {
         const { token: authToken, user } = data.verifyEmail;
         await AsyncStorage.setItem('auth_token', authToken);
-        await AsyncStorage.setItem('auth_user', JSON.stringify(user));
+        await updateUser(user);
         setState('success');
         setTimeout(() => router.replace('/(app)/dashboard'), 2000);
       })

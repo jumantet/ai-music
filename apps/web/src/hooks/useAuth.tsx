@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useApolloClient } from '@apollo/client';
 import { router } from 'expo-router';
 import { LOGIN_MUTATION, SIGNUP_MUTATION } from '../graphql/mutations';
+import { registerForceLogout } from '../graphql/authEvents';
 
 interface AuthUser {
   id: string;
@@ -18,6 +19,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (user: AuthUser) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -63,8 +65,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.replace('/(auth)/login');
   }, [apolloClient]);
 
+  useEffect(() => {
+    registerForceLogout(() => {
+      apolloClient.clearStore();
+      setUser(null);
+      router.replace('/(auth)/login');
+    });
+  }, [apolloClient]);
+
+  const updateUser = useCallback(async (updatedUser: AuthUser) => {
+    await AsyncStorage.setItem('auth_user', JSON.stringify(updatedUser));
+    setUser(updatedUser);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, signup, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
