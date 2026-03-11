@@ -30,6 +30,7 @@ export const LOGIN_MUTATION = gql`
         email
         name
         plan
+        emailVerified
       }
     }
   }
@@ -44,6 +45,7 @@ export const SIGNUP_MUTATION = gql`
         email
         name
         plan
+        emailVerified
       }
     }
   }
