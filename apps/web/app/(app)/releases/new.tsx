@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 import { useMutation } from '@apollo/client';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import {
   CREATE_RELEASE_MUTATION,
   GET_UPLOAD_URL_MUTATION,
@@ -69,6 +70,7 @@ const makeStyles = (colors: ColorPalette) =>
 
 export default function NewReleaseScreen() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [step, setStep] = useState<Step>('info');
@@ -92,7 +94,7 @@ export default function NewReleaseScreen() {
   const [setReleaseTrack] = useMutation(SET_RELEASE_TRACK_MUTATION);
 
   async function handleCreateRelease() {
-    if (!title || !artistName) { setError('Title and artist name are required'); return; }
+    if (!title || !artistName) { setError(t('releases.new.errorRequired')); return; }
     setError('');
     setLoading(true);
     try {
@@ -159,14 +161,20 @@ export default function NewReleaseScreen() {
     else router.back();
   }
 
+  const stepLabels: Record<Step, string> = {
+    info: t('releases.new.stepDetails'),
+    media: t('releases.new.stepMedia'),
+    done: t('releases.new.stepDone'),
+  };
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
       <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={20} color={colors.textSecondary} />
-        <Text style={styles.backText}>Back</Text>
+        <Text style={styles.backText}>{t('releases.new.back')}</Text>
       </TouchableOpacity>
 
-      <Text style={styles.title}>New Release</Text>
+      <Text style={styles.title}>{t('releases.new.title')}</Text>
 
       <View style={styles.steps}>
         {(['info', 'media', 'done'] as Step[]).map((s, i) => (
@@ -178,7 +186,7 @@ export default function NewReleaseScreen() {
             ]}>
               <Text style={styles.stepNum}>{i + 1}</Text>
             </View>
-            <Text style={styles.stepLabel}>{s === 'info' ? 'Details' : s === 'media' ? 'Media' : 'Done'}</Text>
+            <Text style={styles.stepLabel}>{stepLabels[s]}</Text>
           </View>
         ))}
       </View>
@@ -186,18 +194,18 @@ export default function NewReleaseScreen() {
       {step === 'info' && (
         <Card padding="lg">
           <View style={styles.form}>
-            <Text style={styles.sectionTitle}>Release Details</Text>
+            <Text style={styles.sectionTitle}>{t('releases.new.sectionDetails')}</Text>
             {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
-            <Input label="Track / Release title *" value={title} onChangeText={setTitle} placeholder="Driving on My Own" />
-            <Input label="Artist name *" value={artistName} onChangeText={setArtistName} placeholder="California Disco Suicide" />
+            <Input label={t('releases.new.trackTitle')} value={title} onChangeText={setTitle} placeholder={t('releases.new.trackTitlePlaceholder')} />
+            <Input label={t('releases.new.artistName')} value={artistName} onChangeText={setArtistName} placeholder={t('releases.new.artistNamePlaceholder')} />
             <View style={styles.row}>
-              <View style={styles.flex}><Input label="Genre" value={genre} onChangeText={setGenre} placeholder="Indie psych" /></View>
-              <View style={styles.flex}><Input label="Mood" value={mood} onChangeText={setMood} placeholder="Dreamy, hypnotic" /></View>
+              <View style={styles.flex}><Input label={t('releases.new.genre')} value={genre} onChangeText={setGenre} placeholder={t('releases.new.genrePlaceholder')} /></View>
+              <View style={styles.flex}><Input label={t('releases.new.mood')} value={mood} onChangeText={setMood} placeholder={t('releases.new.moodPlaceholder')} /></View>
             </View>
-            <Input label="Based in (city)" value={city} onChangeText={setCity} placeholder="San Francisco" />
-            <Input label="Influences" value={influences} onChangeText={setInfluences} placeholder="Tame Impala, Phoenix" />
-            <Input label="Short bio" value={shortBio} onChangeText={setShortBio} multiline numberOfLines={3} placeholder="A few sentences about you and your music..." />
-            <Button label="Continue →" onPress={handleCreateRelease} loading={loading} fullWidth size="lg" />
+            <Input label={t('releases.new.city')} value={city} onChangeText={setCity} placeholder={t('releases.new.cityPlaceholder')} />
+            <Input label={t('releases.new.influences')} value={influences} onChangeText={setInfluences} placeholder={t('releases.new.influencesPlaceholder')} />
+            <Input label={t('releases.new.bio')} value={shortBio} onChangeText={setShortBio} multiline numberOfLines={3} placeholder={t('releases.new.bioPlaceholder')} />
+            <Button label={t('releases.new.continueBtn')} onPress={handleCreateRelease} loading={loading} fullWidth size="lg" />
           </View>
         </Card>
       )}
@@ -205,16 +213,16 @@ export default function NewReleaseScreen() {
       {step === 'media' && (
         <Card padding="lg">
           <View style={styles.form}>
-            <Text style={styles.sectionTitle}>Cover & Track</Text>
-            <Text style={styles.stepHint}>Upload your cover art and track (optional — you can add them later)</Text>
+            <Text style={styles.sectionTitle}>{t('releases.new.sectionMedia')}</Text>
+            <Text style={styles.stepHint}>{t('releases.new.mediaHint')}</Text>
             <TouchableOpacity style={styles.uploadBox} onPress={pickAndUploadCover} disabled={mediaLoading}>
               {coverUri ? (
                 <Image source={{ uri: coverUri }} style={styles.coverPreview} />
               ) : (
                 <>
                   <Ionicons name="image-outline" size={36} color={colors.textMuted} />
-                  <Text style={styles.uploadLabel}>Upload Cover Art</Text>
-                  <Text style={styles.uploadHint}>1:1 ratio, JPG or PNG</Text>
+                  <Text style={styles.uploadLabel}>{t('releases.new.uploadCoverLabel')}</Text>
+                  <Text style={styles.uploadHint}>{t('releases.new.uploadCoverHint')}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -223,19 +231,19 @@ export default function NewReleaseScreen() {
                 <>
                   <Ionicons name="checkmark-circle" size={36} color={colors.success} />
                   <Text style={styles.uploadLabel}>{trackUri}</Text>
-                  <Text style={styles.uploadHint}>Track uploaded</Text>
+                  <Text style={styles.uploadHint}>{t('releases.new.trackUploaded')}</Text>
                 </>
               ) : (
                 <>
                   <Ionicons name="musical-note-outline" size={36} color={colors.textMuted} />
-                  <Text style={styles.uploadLabel}>Upload Track</Text>
-                  <Text style={styles.uploadHint}>MP3, WAV, FLAC (web only)</Text>
+                  <Text style={styles.uploadLabel}>{t('releases.new.uploadTrackLabel')}</Text>
+                  <Text style={styles.uploadHint}>{t('releases.new.uploadTrackHint')}</Text>
                 </>
               )}
             </TouchableOpacity>
-            {mediaLoading ? <Text style={styles.uploadingText}>Uploading...</Text> : null}
-            <Button label="Continue to release →" onPress={handleDone} fullWidth size="lg" />
-            <Button label="Skip for now" onPress={handleDone} variant="ghost" fullWidth />
+            {mediaLoading ? <Text style={styles.uploadingText}>{t('releases.new.uploading')}</Text> : null}
+            <Button label={t('releases.new.continueRelease')} onPress={handleDone} fullWidth size="lg" />
+            <Button label={t('releases.new.skip')} onPress={handleDone} variant="ghost" fullWidth />
           </View>
         </Card>
       )}

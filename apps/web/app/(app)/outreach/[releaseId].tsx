@@ -10,6 +10,7 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useMutation } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { OUTREACH_QUERY, CONTACTS_QUERY, RELEASE_QUERY } from '../../../src/graphql/queries';
 import {
   GENERATE_OUTREACH_EMAIL_MUTATION,
@@ -23,15 +24,23 @@ import { colors, spacing, fontSize, radius } from '../../../src/theme';
 import type { Contact, ContactType, Outreach, OutreachStatus } from '@toolkit/shared';
 
 const STATUS_OPTIONS: OutreachStatus[] = ['NOT_CONTACTED', 'SENT', 'REPLIED', 'FEATURED'];
-const CONTACT_TYPE_LABELS: Record<ContactType, string> = {
-  BLOG: 'Blog',
-  RADIO: 'Radio',
-  PLAYLIST: 'Playlist',
-  JOURNALIST: 'Journalist',
+const CONTACT_TYPE_KEYS: Record<ContactType, string> = {
+  BLOG: 'contacts.typeBlog',
+  RADIO: 'contacts.typeRadio',
+  PLAYLIST: 'contacts.typePlaylist',
+  JOURNALIST: 'contacts.typeJournalist',
+};
+
+const STATUS_LABEL_KEYS: Record<OutreachStatus, string> = {
+  NOT_CONTACTED: 'outreach.statusNotContacted',
+  SENT: 'outreach.statusSent',
+  REPLIED: 'outreach.statusReplied',
+  FEATURED: 'outreach.statusFeatured',
 };
 
 export default function OutreachScreen() {
   const { releaseId } = useLocalSearchParams<{ releaseId: string }>();
+  const { t } = useTranslation();
   const [showGenerator, setShowGenerator] = useState(false);
   const [showAssigner, setShowAssigner] = useState(false);
   const [generatedEmail, setGeneratedEmail] = useState<{ subject: string; body: string } | null>(null);
@@ -66,7 +75,7 @@ export default function OutreachScreen() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this outreach?')) return;
+    if (!confirm(t('outreach.back'))) return;
     await deleteOutreach({ variables: { id } });
     refetch();
   }
@@ -75,22 +84,21 @@ export default function OutreachScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
       <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={20} color={colors.textSecondary} />
-        <Text style={styles.backText}>Release</Text>
+        <Text style={styles.backText}>{t('outreach.back')}</Text>
       </TouchableOpacity>
 
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Outreach</Text>
+          <Text style={styles.title}>{t('outreach.title')}</Text>
           {release && (
             <Text style={styles.subtitle}>
               {release.artistName} — {release.title}
             </Text>
           )}
         </View>
-        <Button label="Generate Email" onPress={() => setShowGenerator(true)} />
+        <Button label={t('outreach.generateEmail')} onPress={() => setShowGenerator(true)} />
       </View>
 
-      {/* Stats */}
       <View style={styles.statsRow}>
         {STATUS_OPTIONS.map((status) => {
           const count = outreaches.filter((o) => o.status === status).length;
@@ -103,7 +111,7 @@ export default function OutreachScreen() {
           return (
             <Card key={status} padding="md" style={styles.statCard}>
               <Text style={[styles.statCount, { color: colors_map[status] }]}>{count}</Text>
-              <Text style={styles.statLabel}>{status.replace('_', ' ')}</Text>
+              <Text style={styles.statLabel}>{t(STATUS_LABEL_KEYS[status])}</Text>
             </Card>
           );
         })}
@@ -113,11 +121,9 @@ export default function OutreachScreen() {
         <Card padding="xl" style={styles.emptyCard}>
           <View style={styles.emptyInner}>
             <Text style={styles.emptyEmoji}>✉️</Text>
-            <Text style={styles.emptyTitle}>No outreach yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Generate AI-written emails for blogs, radio stations, and playlist curators
-            </Text>
-            <Button label="Generate first email" onPress={() => setShowGenerator(true)} style={{ marginTop: spacing.md }} />
+            <Text style={styles.emptyTitle}>{t('outreach.emptyTitle')}</Text>
+            <Text style={styles.emptySubtitle}>{t('outreach.emptySubtitle')}</Text>
+            <Button label={t('outreach.generateFirst')} onPress={() => setShowGenerator(true)} style={{ marginTop: spacing.md }} />
           </View>
         </Card>
       )}
@@ -171,6 +177,7 @@ function OutreachCard({
   onSend: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -181,7 +188,7 @@ function OutreachCard({
             {outreach.contact ? (
               <Text style={styles.contactName}>{outreach.contact.name}</Text>
             ) : (
-              <Text style={styles.contactName}>No contact linked</Text>
+              <Text style={styles.contactName}>{t('outreach.noContact')}</Text>
             )}
             <Text style={styles.outreachSubject} numberOfLines={1}>{outreach.subject}</Text>
           </View>
@@ -199,13 +206,13 @@ function OutreachCard({
       {expanded && (
         <View style={styles.outreachExpanded}>
           <View style={styles.emailPreview}>
-            <Text style={styles.emailSubjectLabel}>Subject:</Text>
+            <Text style={styles.emailSubjectLabel}>{t('outreach.labelSubject')}</Text>
             <Text style={styles.emailSubject}>{outreach.subject}</Text>
             <Text style={styles.emailBody}>{outreach.body}</Text>
           </View>
 
           <View style={styles.statusSelector}>
-            <Text style={styles.selectorLabel}>Status:</Text>
+            <Text style={styles.selectorLabel}>{t('outreach.labelStatus')}</Text>
             <View style={styles.statusOptions}>
               {STATUS_OPTIONS.map((s) => (
                 <TouchableOpacity
@@ -214,7 +221,7 @@ function OutreachCard({
                   onPress={() => onStatusChange(outreach.id, s)}
                 >
                   <Text style={[styles.statusChipText, outreach.status === s ? styles.statusChipTextActive : undefined]}>
-                    {s.replace('_', ' ')}
+                    {t(STATUS_LABEL_KEYS[s])}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -224,13 +231,13 @@ function OutreachCard({
           <View style={styles.cardActions}>
             {outreach.contact && outreach.status === 'NOT_CONTACTED' && (
               <Button
-                label="Send Email"
+                label={t('outreach.sendEmail')}
                 onPress={() => onSend(outreach.id)}
                 size="sm"
               />
             )}
             <Button
-              label="Delete"
+              label={t('common.delete')}
               onPress={() => onDelete(outreach.id)}
               variant="danger"
               size="sm"
@@ -253,6 +260,7 @@ function GenerateEmailModal({
   onClose: () => void;
   onGenerated: (email: { subject: string; body: string }) => void;
 }) {
+  const { t } = useTranslation();
   const [contactType, setContactType] = useState<ContactType>('BLOG');
   const [contactName, setContactName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -282,37 +290,36 @@ function GenerateEmailModal({
       <View style={modal.overlay}>
         <View style={modal.sheet}>
           <View style={modal.header}>
-            <Text style={modal.title}>Generate Outreach Email</Text>
+            <Text style={modal.title}>{t('outreach.modalGenerateTitle')}</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
           <View style={modal.body}>
             <View>
-              <Text style={modal.label}>Recipient type</Text>
+              <Text style={modal.label}>{t('outreach.recipientType')}</Text>
               <View style={modal.typeRow}>
-                {(['BLOG', 'RADIO', 'PLAYLIST', 'JOURNALIST'] as ContactType[]).map((t) => (
+                {(['BLOG', 'RADIO', 'PLAYLIST', 'JOURNALIST'] as ContactType[]).map((ct) => (
                   <TouchableOpacity
-                    key={t}
-                    style={[modal.typeChip, contactType === t ? modal.typeChipActive : undefined]}
-                    onPress={() => setContactType(t)}
+                    key={ct}
+                    style={[modal.typeChip, contactType === ct ? modal.typeChipActive : undefined]}
+                    onPress={() => setContactType(ct)}
                   >
-                    <Text style={[modal.typeChipText, contactType === t ? modal.typeChipTextActive : undefined]}>
-                      {CONTACT_TYPE_LABELS[t]}
+                    <Text style={[modal.typeChipText, contactType === ct ? modal.typeChipTextActive : undefined]}>
+                      {t(CONTACT_TYPE_KEYS[ct])}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
             <Input
-              label="Recipient name (optional)"
+              label={t('outreach.recipientName')}
               value={contactName}
               onChangeText={setContactName}
-              placeholder="Max"
-              hint="Used to personalize the greeting"
+              placeholder={t('outreach.recipientNamePlaceholder')}
             />
             <Button
-              label="Generate with AI"
+              label={t('outreach.generateWithAI')}
               onPress={handleGenerate}
               loading={loading}
               fullWidth
@@ -340,6 +347,7 @@ function AssignContactModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [subject, setSubject] = useState(generatedEmail?.subject ?? '');
   const [body, setBody] = useState(generatedEmail?.body ?? '');
@@ -354,7 +362,7 @@ function AssignContactModal({
 
   async function handleSave() {
     if (!selectedContact) {
-      alert('Please select a contact');
+      alert(t('outreach.errorSelectContact'));
       return;
     }
     setLoading(true);
@@ -376,16 +384,16 @@ function AssignContactModal({
         <ScrollView>
           <View style={modal.sheetLarge}>
             <View style={modal.header}>
-              <Text style={modal.title}>Review & Assign Contact</Text>
+              <Text style={modal.title}>{t('outreach.modalReviewTitle')}</Text>
               <TouchableOpacity onPress={onClose}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             <View style={modal.body}>
-              <Input label="Subject" value={subject} onChangeText={setSubject} />
-              <Input label="Body" value={body} onChangeText={setBody} multiline numberOfLines={12} />
+              <Input label={t('outreach.labelSubjectField')} value={subject} onChangeText={setSubject} />
+              <Input label={t('outreach.labelBodyField')} value={body} onChangeText={setBody} multiline numberOfLines={12} />
 
-              <Text style={modal.label}>Assign to contact</Text>
+              <Text style={modal.label}>{t('outreach.assignContact')}</Text>
               <View style={styles.contactGrid}>
                 {contacts.map((c) => (
                   <TouchableOpacity
@@ -398,12 +406,12 @@ function AssignContactModal({
                   </TouchableOpacity>
                 ))}
                 {contacts.length === 0 && (
-                  <Text style={styles.muted}>No contacts yet. Add some in the Contacts tab.</Text>
+                  <Text style={styles.muted}>{t('outreach.noContactsYet')}</Text>
                 )}
               </View>
 
-              <Button label="Save Outreach" onPress={handleSave} loading={loading} fullWidth size="lg" />
-              <Button label="Skip (save without contact)" onPress={onClose} variant="ghost" fullWidth />
+              <Button label={t('outreach.saveOutreach')} onPress={handleSave} loading={loading} fullWidth size="lg" />
+              <Button label={t('outreach.skipSave')} onPress={onClose} variant="ghost" fullWidth />
             </View>
           </View>
         </ScrollView>

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useMutation } from '@apollo/client';
+import { useTranslation } from 'react-i18next';
 import { RESEND_VERIFICATION_MUTATION } from '../../graphql/mutations';
 import { useTheme } from '../../hooks/useTheme';
 import { spacing, fontSize, radius, fonts } from '../../theme';
@@ -39,6 +40,7 @@ const makeStyles = (colors: ColorPalette) =>
 
 export function UnverifiedBanner() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [sent, setSent] = useState(false);
   const [resend] = useMutation(RESEND_VERIFICATION_MUTATION);
@@ -55,13 +57,11 @@ export function UnverifiedBanner() {
   return (
     <View style={styles.banner}>
       <Text style={styles.text}>
-        {sent
-          ? 'Verification email sent. Check your inbox.'
-          : 'Please verify your email address to unlock all features.'}
+        {sent ? t('auth.unverifiedBanner.sent') : t('auth.unverifiedBanner.prompt')}
       </Text>
       {!sent && (
         <TouchableOpacity onPress={handleResend}>
-          <Text style={styles.link}>Resend email</Text>
+          <Text style={styles.link}>{t('auth.unverifiedBanner.resend')}</Text>
         </TouchableOpacity>
       )}
     </View>

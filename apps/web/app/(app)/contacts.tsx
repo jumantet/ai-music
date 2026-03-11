@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useQuery, useMutation } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { CONTACTS_QUERY } from '../../src/graphql/queries';
 import {
   CREATE_CONTACT_MUTATION,
@@ -21,11 +22,11 @@ import { spacing, fontSize, radius, fonts } from '../../src/theme';
 import type { ColorPalette } from '../../src/theme';
 import type { Contact, ContactType } from '@toolkit/shared';
 
-const CONTACT_TYPE_LABELS: Record<ContactType, string> = {
-  BLOG: 'Blog',
-  RADIO: 'Radio',
-  PLAYLIST: 'Playlist',
-  JOURNALIST: 'Journalist',
+const CONTACT_TYPE_KEYS: Record<ContactType, string> = {
+  BLOG: 'contacts.typeBlog',
+  RADIO: 'contacts.typeRadio',
+  PLAYLIST: 'contacts.typePlaylist',
+  JOURNALIST: 'contacts.typeJournalist',
 };
 
 const TYPE_BADGE_VARIANT: Record<ContactType, 'info' | 'warning' | 'success' | 'default'> = {
@@ -109,6 +110,7 @@ function ContactFormModal({
   colors: ColorPalette;
   styles: ReturnType<typeof makeStyles>;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(contact?.name ?? '');
   const [email, setEmail] = useState(contact?.email ?? '');
   const [type, setType] = useState<ContactType>(contact?.type ?? 'BLOG');
@@ -148,34 +150,34 @@ function ContactFormModal({
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{contact ? 'Edit Contact' : 'Add Contact'}</Text>
+            <Text style={styles.modalTitle}>{contact ? t('contacts.modalTitleEdit') : t('contacts.modalTitleAdd')}</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
           <ScrollView>
             <View style={styles.form}>
-              <Input label="Name *" value={name} onChangeText={setName} placeholder="Pitchfork Editorial" />
-              <Input label="Email *" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="contact@pitchfork.com" />
+              <Input label={t('contacts.nameLabel')} value={name} onChangeText={setName} placeholder={t('contacts.namePlaceholder')} />
+              <Input label={t('contacts.emailLabel')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder={t('contacts.emailPlaceholder')} />
               <View>
-                <Text style={styles.typeLabel}>Type</Text>
+                <Text style={styles.typeLabel}>{t('contacts.typeLabel')}</Text>
                 <View style={styles.typeRow}>
-                  {(['BLOG', 'RADIO', 'PLAYLIST', 'JOURNALIST'] as ContactType[]).map((t) => (
+                  {(['BLOG', 'RADIO', 'PLAYLIST', 'JOURNALIST'] as ContactType[]).map((ct) => (
                     <TouchableOpacity
-                      key={t}
-                      style={[styles.typeChip, type === t ? styles.typeChipActive : undefined]}
-                      onPress={() => setType(t)}
+                      key={ct}
+                      style={[styles.typeChip, type === ct ? styles.typeChipActive : undefined]}
+                      onPress={() => setType(ct)}
                     >
-                      <Text style={[styles.typeChipText, type === t ? styles.typeChipTextActive : undefined]}>
-                        {CONTACT_TYPE_LABELS[t]}
+                      <Text style={[styles.typeChipText, type === ct ? styles.typeChipTextActive : undefined]}>
+                        {t(CONTACT_TYPE_KEYS[ct])}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </View>
-              <Input label="Website" value={website} onChangeText={setWebsite} placeholder="https://pitchfork.com" />
-              <Input label="Notes" value={notes} onChangeText={setNotes} multiline numberOfLines={3} placeholder="Covers indie rock, psych..." />
-              <Button label={contact ? 'Save Changes' : 'Add Contact'} onPress={handleSave} loading={loading} fullWidth />
+              <Input label={t('contacts.websiteLabel')} value={website} onChangeText={setWebsite} placeholder={t('contacts.websitePlaceholder')} />
+              <Input label={t('contacts.notesLabel')} value={notes} onChangeText={setNotes} multiline numberOfLines={3} placeholder={t('contacts.notesPlaceholder')} />
+              <Button label={contact ? t('contacts.submitEdit') : t('contacts.submitAdd')} onPress={handleSave} loading={loading} fullWidth />
             </View>
           </ScrollView>
         </View>
@@ -186,6 +188,7 @@ function ContactFormModal({
 
 export default function ContactsScreen() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, loading, refetch } = useQuery(CONTACTS_QUERY);
   const [deleteContact] = useMutation(DELETE_CONTACT_MUTATION, { refetchQueries: [CONTACTS_QUERY] });
@@ -197,15 +200,15 @@ export default function ContactsScreen() {
   const filtered = filterType === 'ALL' ? contacts : contacts.filter((c) => c.type === filterType);
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this contact?')) return;
+    if (!confirm(t('contacts.deleteConfirm'))) return;
     await deleteContact({ variables: { id } });
   }
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Contacts</Text>
-        <Button label="Add Contact" onPress={() => { setEditingContact(null); setShowForm(true); }} />
+        <Text style={styles.title}>{t('contacts.title')}</Text>
+        <Button label={t('contacts.addContact')} onPress={() => { setEditingContact(null); setShowForm(true); }} />
       </View>
 
       <View style={styles.filters}>
@@ -216,22 +219,22 @@ export default function ContactsScreen() {
             onPress={() => setFilterType(type)}
           >
             <Text style={[styles.filterText, filterType === type ? styles.filterTextActive : undefined]}>
-              {type === 'ALL' ? 'All' : CONTACT_TYPE_LABELS[type]}
+              {type === 'ALL' ? t('contacts.filterAll') : t(CONTACT_TYPE_KEYS[type])}
               {type !== 'ALL' ? ` (${contacts.filter((c) => c.type === type).length})` : ''}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {loading ? <Text style={styles.muted}>Loading...</Text> : null}
+      {loading ? <Text style={styles.muted}>{t('common.loading')}</Text> : null}
 
       {!loading && filtered.length === 0 ? (
         <Card padding="xl">
           <View style={styles.emptyInner}>
             <Text style={styles.emptyEmoji}>📋</Text>
-            <Text style={styles.emptyTitle}>No contacts yet</Text>
-            <Text style={styles.emptySubtitle}>Add blogs, radio stations, and playlist curators you want to reach out to</Text>
-            <Button label="Add first contact" onPress={() => setShowForm(true)} style={{ marginTop: spacing.md }} />
+            <Text style={styles.emptyTitle}>{t('contacts.emptyTitle')}</Text>
+            <Text style={styles.emptySubtitle}>{t('contacts.emptySubtitle')}</Text>
+            <Button label={t('contacts.addFirst')} onPress={() => setShowForm(true)} style={{ marginTop: spacing.md }} />
           </View>
         </Card>
       ) : null}
@@ -247,7 +250,7 @@ export default function ContactsScreen() {
                 <Text style={styles.contactName}>{contact.name}</Text>
                 <Text style={styles.contactEmail}>{contact.email}</Text>
                 {contact.website ? <Text style={styles.contactWebsite} numberOfLines={1}>{contact.website}</Text> : null}
-                <Badge label={CONTACT_TYPE_LABELS[contact.type]} variant={TYPE_BADGE_VARIANT[contact.type]} />
+                <Badge label={t(CONTACT_TYPE_KEYS[contact.type])} variant={TYPE_BADGE_VARIANT[contact.type]} />
               </View>
               <View style={styles.contactActions}>
                 <TouchableOpacity style={styles.iconBtn} onPress={() => { setEditingContact(contact); setShowForm(true); }}>

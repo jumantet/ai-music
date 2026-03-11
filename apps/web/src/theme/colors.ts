@@ -1,35 +1,35 @@
 import type { ColorPalette } from './types';
 
 export const colors: ColorPalette = {
-  // Royal Blue as primary
-  primary: '#1A47C8',
-  primaryDark: '#1138A8',
-  primaryLight: '#2B5CE8',
-  primaryBg: 'rgba(26, 71, 200, 0.08)',
+  // Royal blue — high-contrast on dark backgrounds
+  primary: '#4F7EFF',
+  primaryDark: '#3362E0',
+  primaryLight: '#6E97FF',
+  primaryBg: 'rgba(79, 126, 255, 0.14)',
 
-  // Surfaces
-  bg: '#FFFFFF',
-  bgCard: '#F8F8F8',
-  bgElevated: '#EFEFEF',
-  bgHover: '#E6E6E6',
-  border: '#E0E0E0',
-  borderLight: '#CCCCCC',
+  // Dark surfaces — deep navy-black with strong contrast steps
+  bg: '#08080E',
+  bgCard: '#111118',
+  bgElevated: '#1A1A25',
+  bgHover: '#22222F',
+  border: '#2C2C3E',
+  borderLight: '#3E3E55',
 
-  // Text
-  textPrimary: '#0A0A0A',
-  textSecondary: '#444444',
-  textMuted: '#888888',
+  // Text — maximum contrast on dark backgrounds
+  textPrimary: '#F5F5FA',
+  textSecondary: '#9898B8',
+  textMuted: '#505068',
   textInverse: '#FFFFFF',
 
-  // Status
-  success: '#15522B',
-  successBg: 'rgba(21, 82, 43, 0.08)',
-  warning: '#CC8800',
-  warningBg: 'rgba(204, 136, 0, 0.10)',
-  error: '#CC0A0A',
-  errorBg: 'rgba(204, 10, 10, 0.08)',
-  info: '#1A47C8',
-  infoBg: 'rgba(26, 71, 200, 0.08)',
+  // Status — vivid, high-contrast for dark mode
+  success: '#2EE89A',
+  successBg: 'rgba(46, 232, 154, 0.12)',
+  warning: '#FFB020',
+  warningBg: 'rgba(255, 176, 32, 0.12)',
+  error: '#FF4545',
+  errorBg: 'rgba(255, 69, 69, 0.12)',
+  info: '#4F7EFF',
+  infoBg: 'rgba(79, 126, 255, 0.12)',
 
   white: '#FFFFFF',
   black: '#000000',

@@ -9,6 +9,7 @@ import {
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { ME_QUERY } from '../../src/graphql/queries';
 import {
   CREATE_STRIPE_CHECKOUT_MUTATION,
@@ -20,13 +21,13 @@ import { Button, Card, Badge, UnverifiedBanner } from '../../src/components/ui';
 import { spacing, fontSize, radius, fonts } from '../../src/theme';
 import type { ColorPalette } from '../../src/theme';
 
-const PRO_FEATURES = [
-  'Unlimited releases',
-  'Unlimited EPK pages',
-  'Unlimited outreach emails',
-  'Press kit generation',
-  'Priority AI generation',
-  'Email sending via Resend',
+const PRO_FEATURE_KEYS = [
+  'settings.featureUnlimitedReleases',
+  'settings.featureUnlimitedEpk',
+  'settings.featureUnlimitedOutreach',
+  'settings.featurePressKit',
+  'settings.featurePriorityAI',
+  'settings.featureEmailSending',
 ];
 
 const makeStyles = (colors: ColorPalette) =>
@@ -97,6 +98,7 @@ export default function SettingsScreen() {
   const { upgraded } = useLocalSearchParams<{ upgraded?: string }>();
   const { user, logout } = useAuth();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data } = useQuery(ME_QUERY);
   const [createCheckout, { loading: checkoutLoading }] = useMutation(CREATE_STRIPE_CHECKOUT_MUTATION);
@@ -120,21 +122,20 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Settings</Text>
+      <Text style={styles.title}>{t('settings.title')}</Text>
 
       {user && !user.emailVerified && <UnverifiedBanner />}
 
       {upgraded === 'true' && (
         <View style={styles.successBanner}>
           <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-          <Text style={styles.successText}>Welcome to Pro! Your account has been upgraded.</Text>
+          <Text style={styles.successText}>{t('settings.welcomePro')}</Text>
         </View>
       )}
 
       <Card padding="lg">
-        <Text style={styles.sectionTitle}>Account</Text>
+        <Text style={styles.sectionTitle}>{t('settings.sectionAccount')}</Text>
         <View style={styles.accountRow}>
-          {/* Avatar in red */}
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{(user?.name ?? 'U').charAt(0).toUpperCase()}</Text>
           </View>
@@ -144,49 +145,50 @@ export default function SettingsScreen() {
           </View>
           <Badge label={plan} variant={plan === 'PRO' ? 'warning' : 'default'} />
         </View>
-        <Button label="Sign out" onPress={logout} variant="ghost" style={{ marginTop: spacing.md }} />
+        <Button label={t('settings.signOut')} onPress={logout} variant="ghost" style={{ marginTop: spacing.md }} />
       </Card>
 
       {plan === 'FREE' ? (
-        /* Gold-bordered upgrade card */
         <Card padding="lg" style={styles.upgradeCard}>
           <View style={styles.upgradeHeader}>
             <View>
-              <Text style={styles.upgradeTitle}>Upgrade to Pro</Text>
+              <Text style={styles.upgradeTitle}>{t('settings.upgradeTitle')}</Text>
               <Text style={styles.upgradePrice}>
-                From <Text style={styles.priceHighlight}>€12/month</Text>
+                {t('settings.upgradePrice').split('€12')[0]}
+                <Text style={styles.priceHighlight}>€12</Text>
+                {t('settings.upgradePrice').split('€12')[1]}
               </Text>
             </View>
             <View style={styles.proStarBadge}>
-              <Text style={styles.proStarText}>★ PRO</Text>
+              <Text style={styles.proStarText}>{t('settings.proBadge')}</Text>
             </View>
           </View>
           <View style={styles.featureList}>
-            {PRO_FEATURES.map((feature) => (
-              <View key={feature} style={styles.featureItem}>
-                  <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
-                <Text style={styles.featureText}>{feature}</Text>
+            {PRO_FEATURE_KEYS.map((key) => (
+              <View key={key} style={styles.featureItem}>
+                <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                <Text style={styles.featureText}>{t(key)}</Text>
               </View>
             ))}
           </View>
-          <Button label="Upgrade to Pro →" onPress={handleUpgrade} loading={checkoutLoading} fullWidth size="lg" style={{ marginTop: spacing.md }} />
+          <Button label={t('settings.upgradeBtn')} onPress={handleUpgrade} loading={checkoutLoading} fullWidth size="lg" style={{ marginTop: spacing.md }} />
         </Card>
       ) : (
         <Card padding="lg">
           <View style={styles.proBadgeRow}>
             <Ionicons name="star" size={24} color={colors.primary} />
-            <Text style={styles.proTitle}>You're on Pro</Text>
+            <Text style={styles.proTitle}>{t('settings.proTitle')}</Text>
           </View>
-          <Text style={styles.proSubtitle}>Enjoy unlimited releases, EPK pages, and outreach emails.</Text>
-          <Button label="Manage Billing" onPress={handleManageBilling} loading={portalLoading} variant="secondary" style={{ marginTop: spacing.md }} />
+          <Text style={styles.proSubtitle}>{t('settings.proSubtitle')}</Text>
+          <Button label={t('settings.manageBilling')} onPress={handleManageBilling} loading={portalLoading} variant="secondary" style={{ marginTop: spacing.md }} />
         </Card>
       )}
 
       <Card padding="lg">
-        <Text style={styles.sectionTitle}>About</Text>
+        <Text style={styles.sectionTitle}>{t('settings.sectionAbout')}</Text>
         <View style={styles.aboutList}>
-          <AboutRow label="Version" value="1.0.0" styles={styles} />
-          <AboutRow label="Stack" value="Expo · Apollo · PostgreSQL" styles={styles} />
+          <AboutRow label={t('settings.labelVersion')} value="1.0.0" styles={styles} />
+          <AboutRow label={t('settings.labelStack')} value="Expo · Apollo · PostgreSQL" styles={styles} />
         </View>
       </Card>
     </ScrollView>

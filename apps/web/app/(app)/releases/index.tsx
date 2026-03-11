@@ -10,6 +10,7 @@ import {
 import { router } from 'expo-router';
 import { useQuery } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { ME_QUERY } from '../../../src/graphql/queries';
 import { DELETE_RELEASE_MUTATION } from '../../../src/graphql/mutations';
 import { Button, Card, Badge } from '../../../src/components/ui';
@@ -58,6 +59,7 @@ const makeStyles = (colors: ColorPalette) =>
 
 export default function ReleasesScreen() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, loading } = useQuery(ME_QUERY);
 
@@ -67,9 +69,9 @@ export default function ReleasesScreen() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Releases</Text>
+        <Text style={styles.title}>{t('releases.title')}</Text>
         <Button
-          label="New Release"
+          label={t('releases.newRelease')}
           onPress={() => router.push('/(app)/releases/new')}
           disabled={plan === 'FREE' && releases.length >= 1}
         />
@@ -79,26 +81,24 @@ export default function ReleasesScreen() {
         <View style={styles.limitBox}>
           <Ionicons name="lock-closed" size={16} color={colors.warning} />
           <Text style={styles.limitText}>
-            Free plan: 1 release max.{' '}
+            {t('releases.freePlanLimit')}
             <Text style={styles.upgradeLink} onPress={() => router.push('/(app)/settings')}>
-              Upgrade to Pro
-            </Text>{' '}
-            for unlimited releases.
+              {t('releases.freePlanUpgrade')}
+            </Text>
+            {t('releases.freePlanLimitSuffix')}
           </Text>
         </View>
       )}
 
-      {loading ? <Text style={styles.muted}>Loading...</Text> : null}
+      {loading ? <Text style={styles.muted}>{t('common.loading')}</Text> : null}
 
       {!loading && releases.length === 0 ? (
         <Card padding="xl">
           <View style={styles.emptyInner}>
             <Text style={styles.emptyEmoji}>🎵</Text>
-            <Text style={styles.emptyTitle}>No releases yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Add your first release to generate an EPK, press kit, and outreach emails
-            </Text>
-            <Button label="Create release" onPress={() => router.push('/(app)/releases/new')} style={{ marginTop: spacing.md }} />
+            <Text style={styles.emptyTitle}>{t('releases.emptyTitle')}</Text>
+            <Text style={styles.emptySubtitle}>{t('releases.emptySubtitle')}</Text>
+            <Button label={t('releases.createRelease')} onPress={() => router.push('/(app)/releases/new')} style={{ marginTop: spacing.md }} />
           </View>
         </Card>
       ) : null}
@@ -119,7 +119,7 @@ export default function ReleasesScreen() {
                 <Text style={styles.releaseArtist} numberOfLines={1}>{release.artistName}</Text>
                 <View style={styles.badges}>
                   {release.genre ? <Badge label={release.genre} /> : null}
-                  {release.epkPage?.isPublished ? <Badge label="EPK Live" variant="success" /> : null}
+                  {release.epkPage?.isPublished ? <Badge label={t('releases.badgeEpkLive')} variant="success" /> : null}
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />

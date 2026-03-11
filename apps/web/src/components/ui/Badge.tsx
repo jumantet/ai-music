@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../hooks/useTheme';
 import { spacing, radius, fontSize, fonts } from '../../theme';
 import type { ColorPalette } from '../../theme';
@@ -60,13 +61,14 @@ const STATUS_VARIANT: Record<OutreachStatus, BadgeVariant> = {
   FEATURED: 'success',
 };
 
-const STATUS_LABEL: Record<OutreachStatus, string> = {
-  NOT_CONTACTED: 'Not contacted',
-  SENT: 'Sent',
-  REPLIED: 'Replied',
-  FEATURED: 'Featured',
+const STATUS_I18N_KEYS: Record<OutreachStatus, string> = {
+  NOT_CONTACTED: 'badge.notContacted',
+  SENT: 'badge.sent',
+  REPLIED: 'badge.replied',
+  FEATURED: 'badge.featured',
 };
 
 export function OutreachStatusBadge({ status }: { status: OutreachStatus }) {
-  return <Badge label={STATUS_LABEL[status]} variant={STATUS_VARIANT[status]} />;
+  const { t } = useTranslation();
+  return <Badge label={t(STATUS_I18N_KEYS[status])} variant={STATUS_VARIANT[status]} />;
 }

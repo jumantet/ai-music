@@ -10,6 +10,7 @@ import {
 import { Link, router } from 'expo-router';
 import { useQuery } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { ME_QUERY } from '../../src/graphql/queries';
 import { Button, Card, Badge, UnverifiedBanner } from '../../src/components/ui';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -165,6 +166,7 @@ function StatCard({ label, value, icon, accentColor }: {
 }
 
 function ReleaseRow({ release, colors }: { release: Release; colors: ColorPalette }) {
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Link href={`/(app)/releases/${release.id}` as any} asChild>
@@ -183,8 +185,8 @@ function ReleaseRow({ release, colors }: { release: Release; colors: ColorPalett
               <Text style={styles.releaseArtist} numberOfLines={1}>{release.artistName}</Text>
               <View style={styles.releaseBadges}>
                 {release.genre ? <Badge label={release.genre} variant="default" /> : null}
-                {release.epkPage?.isPublished ? <Badge label="EPK Live" variant="success" /> : null}
-                {release.pressKit ? <Badge label="Press Kit" variant="info" /> : null}
+                {release.epkPage?.isPublished ? <Badge label={t('dashboard.badgeEpkLive')} variant="success" /> : null}
+                {release.pressKit ? <Badge label={t('dashboard.badgePressKit')} variant="info" /> : null}
               </View>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
@@ -199,6 +201,7 @@ export default function DashboardScreen() {
   const { data, loading, error } = useQuery(ME_QUERY);
   const { user: authUser } = useAuth();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const user = data?.me;
@@ -209,25 +212,23 @@ export default function DashboardScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
       {authUser && !authUser.emailVerified && <UnverifiedBanner />}
 
-      {/* Hero greeting */}
       <View style={styles.hero}>
         <View style={styles.heroLeft}>
-          <Text style={styles.heroEyebrow}>YOUR DASHBOARD</Text>
+          <Text style={styles.heroEyebrow}>{t('dashboard.eyebrow')}</Text>
           <Text style={styles.heroTitle}>
-            {firstName ? `Hey ${firstName}! 👋` : 'Welcome back! 👋'}
+            {firstName ? t('dashboard.welcome', { name: firstName }) : t('dashboard.welcomeAnon')}
           </Text>
           <Text style={styles.heroSubtitle}>
             {releases.length === 0
-              ? 'Ready to share your music with the world?'
-              : `You have ${releases.length} release${releases.length > 1 ? 's' : ''} in progress.`}
+              ? t('dashboard.subtitleEmpty')
+              : t('dashboard.subtitleReleases', { count: releases.length })}
           </Text>
         </View>
         <TouchableOpacity style={styles.heroBtn} onPress={() => router.push('/(app)/releases/new')}>
-          <Text style={styles.heroBtnText}>+ New Release</Text>
+          <Text style={styles.heroBtnText}>{t('dashboard.newRelease')}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Upgrade banner */}
       {user?.plan === 'FREE' && (
         <Card style={styles.upgradeBanner} padding="md">
           <View style={styles.upgradeInner}>
@@ -235,44 +236,40 @@ export default function DashboardScreen() {
               <Ionicons name="rocket-outline" size={22} color={colors.white} />
             </View>
             <View style={styles.upgradeLeft}>
-              <Text style={styles.upgradeTitle}>Upgrade to Pro</Text>
-              <Text style={styles.upgradeSubtitle}>
-                Unlimited releases, EPK pages & outreach — from €12/month
-              </Text>
+              <Text style={styles.upgradeTitle}>{t('dashboard.upgradeBannerTitle')}</Text>
+              <Text style={styles.upgradeSubtitle}>{t('dashboard.upgradeBannerSubtitle')}</Text>
             </View>
             <Link href="/(app)/settings" asChild>
               <TouchableOpacity>
-                <Button label="Upgrade →" onPress={() => {}} size="sm" />
+                <Button label={t('dashboard.upgradeButton')} onPress={() => {}} size="sm" />
               </TouchableOpacity>
             </Link>
           </View>
         </Card>
       )}
 
-      {/* Stats */}
       <View style={styles.statsRow}>
-        <StatCard label="Releases" value={releases.length.toString()} icon="musical-notes" accentColor={colors.primary} />
-        <StatCard label="EPK Pages" value={releases.filter((r) => r.epkPage?.isPublished).length.toString()} icon="globe-outline" accentColor={colors.primaryDark} />
-        <StatCard label="Press Kits" value={releases.filter((r) => r.pressKit).length.toString()} icon="document-text" accentColor={colors.textPrimary} />
+        <StatCard label={t('dashboard.statReleases')} value={releases.length.toString()} icon="musical-notes" accentColor={colors.white} />
+        <StatCard label={t('dashboard.statEpk')} value={releases.filter((r) => r.epkPage?.isPublished).length.toString()} icon="globe-outline" accentColor={colors.white} />
+        <StatCard label={t('dashboard.statPressKits')} value={releases.filter((r) => r.pressKit).length.toString()} icon="document-text" accentColor={colors.white} />
       </View>
 
-      {/* Recent releases */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Recent Releases</Text>
+            <Text style={styles.sectionTitle}>{t('dashboard.recentReleases')}</Text>
           </View>
           {releases.length > 5 && (
             <Link href="/(app)/releases" asChild>
               <TouchableOpacity style={styles.viewAll}>
-                <Text style={styles.viewAllText}>See all →</Text>
+                <Text style={styles.viewAllText}>{t('dashboard.seeAll')}</Text>
               </TouchableOpacity>
             </Link>
           )}
         </View>
 
-        {loading ? <Text style={styles.muted}>Loading...</Text> : null}
-        {error ? <Text style={styles.errorText}>Failed to load releases</Text> : null}
+        {loading ? <Text style={styles.muted}>{t('common.loading')}</Text> : null}
+        {error ? <Text style={styles.errorText}>{t('dashboard.errorLoad')}</Text> : null}
 
         {!loading && releases.length === 0 ? (
           <Card>
@@ -280,12 +277,10 @@ export default function DashboardScreen() {
               <View style={styles.emptyIconBox}>
                 <Ionicons name="musical-notes" size={32} color={colors.primary} />
               </View>
-              <Text style={styles.emptyTitle}>No releases yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Create your first release to generate your EPK, press kit, and start outreach.
-              </Text>
+              <Text style={styles.emptyTitle}>{t('dashboard.emptyTitle')}</Text>
+              <Text style={styles.emptySubtitle}>{t('dashboard.emptySubtitle')}</Text>
               <Button
-                label="Create your first release"
+                label={t('dashboard.createFirst')}
                 onPress={() => router.push('/(app)/releases/new')}
               />
             </View>

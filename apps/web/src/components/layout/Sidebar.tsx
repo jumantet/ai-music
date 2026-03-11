@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
 import { spacing, fontSize, radius, fonts } from '../../theme';
@@ -15,12 +16,12 @@ interface NavItem {
   activeIcon: keyof typeof Ionicons.glyphMap;
 }
 
-const navItems: NavItem[] = [
-  { label: 'Dashboard', path: '/dashboard', href: '/(app)/dashboard', icon: 'home-outline', activeIcon: 'home' },
-  { label: 'Releases', path: '/releases', href: '/(app)/releases', icon: 'musical-notes-outline', activeIcon: 'musical-notes' },
-  { label: 'Contacts', path: '/contacts', href: '/(app)/contacts', icon: 'people-outline', activeIcon: 'people' },
-  { label: 'Settings', path: '/settings', href: '/(app)/settings', icon: 'settings-outline', activeIcon: 'settings' },
-];
+const NAV_ITEMS_CONFIG = [
+  { key: 'sidebar.dashboard', path: '/dashboard', href: '/(app)/dashboard', icon: 'home-outline', activeIcon: 'home' },
+  { key: 'sidebar.releases', path: '/releases', href: '/(app)/releases', icon: 'musical-notes-outline', activeIcon: 'musical-notes' },
+  { key: 'sidebar.contacts', path: '/contacts', href: '/(app)/contacts', icon: 'people-outline', activeIcon: 'people' },
+  { key: 'sidebar.settings', path: '/settings', href: '/(app)/settings', icon: 'settings-outline', activeIcon: 'settings' },
+] as const;
 
 const makeStyles = (colors: ColorPalette) =>
   StyleSheet.create({
@@ -111,6 +112,7 @@ export function Sidebar() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
@@ -121,13 +123,13 @@ export function Sidebar() {
             <Text style={styles.logoEmoji}>🎵</Text>
           </View>
           <View style={styles.logoTextBlock}>
-            <Text style={styles.logoText}>Release Toolkit</Text>
-            <Text style={styles.logoTagline}>AI for artists</Text>
+            <Text style={styles.logoText}>{t('sidebar.appName')}</Text>
+            <Text style={styles.logoTagline}>{t('sidebar.tagline')}</Text>
           </View>
         </View>
 
         <View style={styles.nav}>
-          {navItems.map((item) => {
+          {NAV_ITEMS_CONFIG.map((item) => {
             const isActive = pathname === item.path || pathname.startsWith(item.path + '/');
             return (
               <TouchableOpacity
@@ -142,7 +144,7 @@ export function Sidebar() {
                   color={isActive ? colors.primary : colors.textSecondary}
                 />
                 <Text style={isActive ? styles.navLabelActive : styles.navLabel}>
-                  {item.label}
+                  {t(item.key)}
                 </Text>
               </TouchableOpacity>
             );
@@ -159,7 +161,7 @@ export function Sidebar() {
             <View style={styles.userInfo}>
               <Text style={styles.userName} numberOfLines={1}>{user.name}</Text>
               <Text style={user.plan === 'PRO' ? styles.planPro : styles.planFree}>
-                {user.plan === 'PRO' ? '★ Pro' : 'Free plan'}
+                {user.plan === 'PRO' ? t('common.pro') : t('common.freePlan')}
               </Text>
             </View>
             <TouchableOpacity onPress={logout} activeOpacity={0.7} style={styles.logoutIcon}>

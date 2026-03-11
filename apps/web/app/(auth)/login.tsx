@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Link } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/hooks/useTheme';
 import { Button, Input } from '../../src/components/ui';
@@ -60,6 +61,7 @@ const makeStyles = (colors: ColorPalette) =>
 export default function LoginScreen() {
   const { login } = useAuth();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [email, setEmail] = useState('');
@@ -68,13 +70,13 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
 
   async function handleLogin() {
-    if (!email || !password) { setError('Please fill in all fields'); return; }
+    if (!email || !password) { setError(t('auth.login.errorEmpty')); return; }
     setError('');
     setLoading(true);
     try {
       await login(email, password);
     } catch (e) {
-      setError((e as Error).message ?? 'Login failed');
+      setError((e as Error).message ?? t('auth.login.errorFallback'));
     } finally {
       setLoading(false);
     }
@@ -87,8 +89,8 @@ export default function LoginScreen() {
           <View style={styles.logo}>
             <Text style={styles.logoText}>🎵</Text>
           </View>
-          <Text style={styles.title}>AI Release Toolkit</Text>
-          <Text style={styles.subtitle}>Sign in to your account</Text>
+          <Text style={styles.title}>{t('auth.login.title')}</Text>
+          <Text style={styles.subtitle}>{t('auth.login.subtitle')}</Text>
         </View>
 
         <View style={styles.form}>
@@ -98,16 +100,16 @@ export default function LoginScreen() {
             </View>
           ) : null}
 
-          <Input label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="you@example.com" />
-          <Input label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="••••••••" />
+          <Input label={t('auth.login.emailLabel')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder={t('auth.login.emailPlaceholder')} />
+          <Input label={t('auth.login.passwordLabel')} value={password} onChangeText={setPassword} secureTextEntry placeholder={t('auth.login.passwordPlaceholder')} />
 
-          <Button label="Sign in" onPress={handleLogin} loading={loading} fullWidth size="lg" />
+          <Button label={t('auth.login.submit')} onPress={handleLogin} loading={loading} fullWidth size="lg" />
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>{t('auth.login.noAccount')}</Text>
             <Link href="/(auth)/signup" asChild>
               <TouchableOpacity>
-                <Text style={styles.footerLink}>Sign up</Text>
+                <Text style={styles.footerLink}>{t('auth.login.signupLink')}</Text>
               </TouchableOpacity>
             </Link>
           </View>
