@@ -24,10 +24,6 @@ export const videoAdsResolvers = {
       requireAuth(ctx.user);
       requireVerified(ctx.user);
 
-      if (ctx.user.plan === 'FREE') {
-        throw new Error('Video Ads is a Pro feature. Upgrade to access the video library.');
-      }
-
       const release = await prisma.release.findFirst({
         where: { id: releaseId, userId: ctx.user.id },
       });
@@ -50,10 +46,6 @@ export const videoAdsResolvers = {
       requireAuth(ctx.user);
       requireVerified(ctx.user);
 
-      if (ctx.user.plan === 'FREE') {
-        throw new Error('Meta Ads is a Pro feature.');
-      }
-
       const user = await prisma.user.findUnique({ where: { id: ctx.user.id } });
       if (!user?.metaAccessToken) throw new Error('Meta account not connected.');
 
@@ -64,10 +56,6 @@ export const videoAdsResolvers = {
     metaPages: async (_: unknown, __: unknown, ctx: AuthContext) => {
       requireAuth(ctx.user);
       requireVerified(ctx.user);
-
-      if (ctx.user.plan === 'FREE') {
-        throw new Error('Meta Ads is a Pro feature.');
-      }
 
       const user = await prisma.user.findUnique({ where: { id: ctx.user.id } });
       if (!user?.metaAccessToken) throw new Error('Meta account not connected.');
@@ -89,10 +77,6 @@ export const videoAdsResolvers = {
     ) => {
       requireAuth(ctx.user);
       requireVerified(ctx.user);
-
-      if (ctx.user.plan === 'FREE') {
-        throw new Error('Video Ads is a Pro feature. Upgrade to save video selections.');
-      }
 
       const release = await prisma.release.findFirst({
         where: { id: releaseId, userId: ctx.user.id },
@@ -122,10 +106,6 @@ export const videoAdsResolvers = {
     ) => {
       requireAuth(ctx.user);
       requireVerified(ctx.user);
-
-      if (ctx.user.plan === 'FREE') {
-        throw new Error('Meta Ads is a Pro feature.');
-      }
 
       return prisma.user.update({
         where: { id: ctx.user.id },
@@ -161,10 +141,6 @@ export const videoAdsResolvers = {
       requireAuth(ctx.user);
       requireVerified(ctx.user);
 
-      if (ctx.user.plan === 'FREE') {
-        throw new Error('Meta Ads is a Pro feature.');
-      }
-
       const user = await prisma.user.findUnique({ where: { id: ctx.user.id } });
       if (!user?.metaAccessToken || !user?.metaAdAccountId) {
         throw new Error('Connect your Meta account first.');
@@ -188,7 +164,6 @@ export const videoAdsResolvers = {
         instagramActorId: args.instagramActorId,
       });
 
-      // Persist campaign ID on the VideoAdCampaign record
       await prisma.videoAdCampaign.upsert({
         where: { releaseId: args.releaseId },
         create: {

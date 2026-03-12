@@ -57,16 +57,30 @@ export const releaseResolvers = {
       requireVerified(ctx.user);
 
       if (ctx.user.plan === 'FREE') {
-        const count = await prisma.release.count({ where: { userId: ctx.user.id } });
-        if (count >= 1) {
-          throw new Error('Free plan is limited to 1 release. Upgrade to Pro for unlimited releases.');
+        const user = await prisma.user.findUnique({
+          where: { id: ctx.user.id },
+          select: { totalReleasesCreated: true },
+        });
+        // Guard against delete-and-recreate abuse: check lifetime counter, not current count
+        if ((user?.totalReleasesCreated ?? 0) >= 1) {
+          throw new Error(
+            'Free plan is limited to 1 release. Upgrade to Pro for unlimited releases.'
+          );
         }
       }
 
-      return prisma.release.create({
-        data: { ...input, userId: ctx.user.id },
-        include: { epkPage: true, pressKit: true, videoAdCampaign: true },
-      });
+      const [release] = await prisma.$transaction([
+        prisma.release.create({
+          data: { ...input, userId: ctx.user.id },
+          include: { epkPage: true, pressKit: true, videoAdCampaign: true },
+        }),
+        prisma.user.update({
+          where: { id: ctx.user.id },
+          data: { totalReleasesCreated: { increment: 1 } },
+        }),
+      ]);
+
+      return release;
     },
 
     updateRelease: async (

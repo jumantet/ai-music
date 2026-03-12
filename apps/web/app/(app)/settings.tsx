@@ -235,8 +235,7 @@ export default function SettingsScreen() {
         </Card>
       )}
 
-      {plan === 'PRO' && (
-        <Card padding="lg">
+      <Card padding="lg">
           <View style={styles.metaHeader}>
             <Ionicons name="logo-facebook" size={22} color="#1877F2" />
             <Text style={styles.sectionTitle} >Meta Ads</Text>
@@ -309,7 +308,6 @@ export default function SettingsScreen() {
             </>
           )}
         </Card>
-      )}
 
       <Card padding="lg">
         <Text style={styles.sectionTitle}>{t('settings.sectionAbout')}</Text>

@@ -27,20 +27,21 @@ enum OutreachStatus {
 }
 
 model User {
-  id                String    @id @default(cuid())
-  email             String    @unique
-  name              String
-  password          String
-  plan              Plan      @default(FREE)
-  stripeCustomerId  String?
-  emailVerified     Boolean   @default(false)
-  verifyToken       String?   @unique
-  metaAccessToken   String?
-  metaAdAccountId   String?
-  releases          Release[]
-  contacts          Contact[]
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                    String    @id @default(cuid())
+  email                 String    @unique
+  name                  String
+  password              String
+  plan                  Plan      @default(FREE)
+  stripeCustomerId      String?
+  emailVerified         Boolean   @default(false)
+  verifyToken           String?   @unique
+  metaAccessToken       String?
+  metaAdAccountId       String?
+  totalReleasesCreated  Int       @default(0)
+  releases              Release[]
+  contacts              Contact[]
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 }
 
 model Release {

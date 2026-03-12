@@ -23,7 +23,6 @@ import {
   SAVE_VIDEO_SELECTION_MUTATION,
   CREATE_META_AD_CAMPAIGN_MUTATION,
 } from '../../../src/graphql/mutations';
-import { useAuth } from '../../../src/hooks/useAuth';
 import { Button, Card, Badge } from '../../../src/components/ui';
 import { Input } from '../../../src/components/ui/Input';
 import { colors, spacing, fontSize, radius } from '../../../src/theme';
@@ -395,9 +394,7 @@ function OutreachTab({ release }: { release: Release }) {
 }
 
 function VideoAdsTab({ release, refetch }: { release: Release; refetch: () => void }) {
-  const { user: authUser } = useAuth();
   const { data: meData } = useQuery(ME_QUERY);
-  const user = meData?.me ?? authUser;
   const [videos, setVideos] = useState<PexelsVideo[]>([]);
   const [selected, setSelected] = useState<Set<string>>(
     new Set(release.videoAdCampaign?.selectedVideoUrls ?? [])
@@ -492,29 +489,6 @@ function VideoAdsTab({ release, refetch }: { release: Release; refetch: () => vo
         message: campaignMessage,
       },
     });
-  }
-
-  const isPro = (meData?.me?.plan ?? authUser?.plan) === 'PRO';
-
-  if (!isPro) {
-    return (
-      <View style={styles.tabContent}>
-        <Card padding="lg">
-          <View style={styles.proGate}>
-            <Ionicons name="lock-closed" size={32} color={colors.textMuted} />
-            <Text style={styles.proGateTitle}>Video Ads — Pro Feature</Text>
-            <Text style={styles.muted}>
-              Upgrade to Pro to access the royalty-free video library and create Meta ad campaigns.
-            </Text>
-            <Button
-              label="Upgrade to Pro"
-              onPress={() => router.push('/(app)/settings')}
-              style={{ marginTop: spacing.md }}
-            />
-          </View>
-        </Card>
-      </View>
-    );
   }
 
   return (
