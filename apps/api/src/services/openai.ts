@@ -71,6 +71,55 @@ Return a JSON object with these exact keys:
 }`;
 }
 
+export interface VideoKeywords {
+  keywords: string[];
+}
+
+export async function generateVideoKeywords(ctx: ReleaseContext): Promise<string[]> {
+  const parts = [
+    `Artist: ${ctx.artistName}`,
+    `Track: ${ctx.title}`,
+    ctx.genre ? `Genre: ${ctx.genre}` : null,
+    ctx.mood ? `Mood: ${ctx.mood}` : null,
+    ctx.bpm ? `BPM: ${ctx.bpm}` : null,
+    ctx.influences ? `Influences: ${ctx.influences}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You are a creative director specializing in music video content. Generate concise search keywords for royalty-free stock videos that visually match the mood and atmosphere of a music track. Return ONLY valid JSON.',
+      },
+      {
+        role: 'user',
+        content: `Generate 6 short keyword phrases (2-3 words each) to search for royalty-free stock videos that visually match this track. The videos will be used for Instagram/Meta ads in portrait format.
+
+${parts}
+
+Return JSON:
+{
+  "keywords": ["keyword 1", "keyword 2", "keyword 3", "keyword 4", "keyword 5", "keyword 6"]
+}
+
+Focus on visual aesthetics, mood, settings, and movement. Examples: "city night lights", "ocean waves slow motion", "forest fog atmosphere", "neon street photography".`,
+      },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0.85,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error('No response from AI');
+
+  const parsed = JSON.parse(content) as VideoKeywords;
+  return parsed.keywords;
+}
+
 export interface OutreachEmailContent {
   subject: string;
   body: string;

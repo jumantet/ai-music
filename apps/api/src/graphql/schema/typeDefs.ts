@@ -26,8 +26,29 @@ export const typeDefs = `#graphql
     name: String!
     plan: Plan!
     emailVerified: Boolean!
+    metaAdAccountId: String
+    metaConnected: Boolean!
     createdAt: String!
     releases: [Release!]!
+  }
+
+  type MetaAdAccount {
+    id: ID!
+    name: String!
+    currency: String!
+  }
+
+  type MetaPage {
+    id: ID!
+    name: String!
+    instagramActorId: String
+  }
+
+  type MetaAdCampaignResult {
+    campaignId: String!
+    adSetId: String!
+    adId: String!
+    campaignUrl: String!
   }
 
   type Release {
@@ -44,6 +65,28 @@ export const typeDefs = `#graphql
     shortBio: String
     epkPage: EPKPage
     pressKit: PressKit
+    videoAdCampaign: VideoAdCampaign
+    createdAt: String!
+  }
+
+  type PexelsVideo {
+    id: ID!
+    url: String!
+    thumbnailUrl: String!
+    previewUrl: String!
+    duration: Int!
+    width: Int!
+    height: Int!
+    photographer: String!
+    photographerUrl: String!
+  }
+
+  type VideoAdCampaign {
+    id: ID!
+    releaseId: ID!
+    selectedVideoUrls: [String!]!
+    metaCampaignId: String
+    status: String!
     createdAt: String!
   }
 
@@ -114,6 +157,9 @@ export const typeDefs = `#graphql
     epkPage(slug: String!): EPKPage
     contacts: [Contact!]!
     outreach(releaseId: ID!): [Outreach!]!
+    searchVideosForRelease(releaseId: ID!): [PexelsVideo!]!
+    metaAdAccounts: [MetaAdAccount!]!
+    metaPages: [MetaPage!]!
   }
 
   input CreateReleaseInput {
@@ -187,5 +233,20 @@ export const typeDefs = `#graphql
 
     createStripeCheckout: String!
     createStripePortal: String!
+
+    saveVideoSelection(releaseId: ID!, videoUrls: [String!]!): VideoAdCampaign!
+
+    connectMeta(accessToken: String!, adAccountId: String!): User!
+    disconnectMeta: User!
+    createMetaAdCampaign(
+      releaseId: ID!
+      videoUrl: String!
+      pageId: String!
+      instagramActorId: String
+      campaignName: String!
+      dailyBudgetCents: Int!
+      durationDays: Int!
+      message: String!
+    ): MetaAdCampaignResult!
   }
 `;

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,10 @@ import { ME_QUERY } from '../../src/graphql/queries';
 import {
   CREATE_STRIPE_CHECKOUT_MUTATION,
   CREATE_STRIPE_PORTAL_MUTATION,
+  CONNECT_META_MUTATION,
+  DISCONNECT_META_MUTATION,
 } from '../../src/graphql/mutations';
+import { Input } from '../../src/components/ui/Input';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useIsMobile } from '../../src/hooks/useIsMobile';
@@ -94,6 +97,13 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
     aboutRow: { flexDirection: 'row', justifyContent: 'space-between' },
     aboutLabel: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
     aboutValue: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textPrimary },
+
+    metaHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+    metaConnectedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.successBg, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+    metaConnectedText: { fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.success },
+    metaDesc: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.sm },
+    metaLink: { color: colors.primary },
+    metaFormActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   });
 
 function AboutRow({ label, value, styles }: { label: string; value: string; styles: ReturnType<typeof makeStyles> }) {
@@ -112,11 +122,18 @@ export default function SettingsScreen() {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
-  const { data } = useQuery(ME_QUERY);
+  const { data, refetch: refetchMe } = useQuery(ME_QUERY);
   const [createCheckout, { loading: checkoutLoading }] = useMutation(CREATE_STRIPE_CHECKOUT_MUTATION);
   const [createPortal, { loading: portalLoading }] = useMutation(CREATE_STRIPE_PORTAL_MUTATION);
+  const [connectMeta, { loading: connectingMeta }] = useMutation(CONNECT_META_MUTATION);
+  const [disconnectMeta, { loading: disconnectingMeta }] = useMutation(DISCONNECT_META_MUTATION);
+
+  const [metaToken, setMetaToken] = useState('');
+  const [metaAccountId, setMetaAccountId] = useState('');
+  const [showMetaForm, setShowMetaForm] = useState(false);
 
   const plan = data?.me?.plan ?? user?.plan ?? 'FREE';
+  const metaConnected = data?.me?.metaConnected ?? false;
 
   async function handleUpgrade() {
     try {
@@ -129,6 +146,28 @@ export default function SettingsScreen() {
     try {
       const { data } = await createPortal();
       await Linking.openURL(data.createStripePortal);
+    } catch (e) { alert((e as Error).message); }
+  }
+
+  async function handleConnectMeta() {
+    if (!metaToken.trim() || !metaAccountId.trim()) {
+      alert('Please enter both the access token and ad account ID.');
+      return;
+    }
+    try {
+      await connectMeta({ variables: { accessToken: metaToken.trim(), adAccountId: metaAccountId.trim() } });
+      setShowMetaForm(false);
+      setMetaToken('');
+      setMetaAccountId('');
+      refetchMe();
+    } catch (e) { alert((e as Error).message); }
+  }
+
+  async function handleDisconnectMeta() {
+    if (!confirm('Disconnect your Meta account?')) return;
+    try {
+      await disconnectMeta();
+      refetchMe();
     } catch (e) { alert((e as Error).message); }
   }
 
@@ -193,6 +232,82 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.proSubtitle}>{t('settings.proSubtitle')}</Text>
           <Button label={t('settings.manageBilling')} onPress={handleManageBilling} loading={portalLoading} variant="secondary" style={{ marginTop: spacing.md }} />
+        </Card>
+      )}
+
+      {plan === 'PRO' && (
+        <Card padding="lg">
+          <View style={styles.metaHeader}>
+            <Ionicons name="logo-facebook" size={22} color="#1877F2" />
+            <Text style={styles.sectionTitle} >Meta Ads</Text>
+            {metaConnected && (
+              <View style={styles.metaConnectedBadge}>
+                <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                <Text style={styles.metaConnectedText}>Connected</Text>
+              </View>
+            )}
+          </View>
+
+          {metaConnected ? (
+            <>
+              <Text style={styles.metaDesc}>
+                Your Meta Business account is connected. You can create Instagram ad campaigns directly from the Video Ads tab on each release.
+              </Text>
+              <Button
+                label={disconnectingMeta ? 'Disconnecting...' : 'Disconnect Meta'}
+                onPress={handleDisconnectMeta}
+                loading={disconnectingMeta}
+                variant="ghost"
+                style={{ marginTop: spacing.md }}
+              />
+            </>
+          ) : showMetaForm ? (
+            <>
+              <Text style={styles.metaDesc}>
+                Enter your Meta User Access Token and Ad Account ID. You can get these from{' '}
+                <Text style={styles.metaLink} onPress={() => Linking.openURL('https://developers.facebook.com/tools/explorer/')}>
+                  Meta Graph API Explorer
+                </Text>
+                .
+              </Text>
+              <Input
+                label="User Access Token"
+                value={metaToken}
+                onChangeText={setMetaToken}
+                placeholder="EAABwzLix..."
+              />
+              <Input
+                label="Ad Account ID"
+                value={metaAccountId}
+                onChangeText={setMetaAccountId}
+                placeholder="123456789"
+              />
+              <View style={styles.metaFormActions}>
+                <Button
+                  label={connectingMeta ? 'Connecting...' : 'Connect'}
+                  onPress={handleConnectMeta}
+                  loading={connectingMeta}
+                />
+                <Button
+                  label="Cancel"
+                  onPress={() => setShowMetaForm(false)}
+                  variant="ghost"
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.metaDesc}>
+                Connect your Meta Business account to create Instagram Reels & Stories ad campaigns directly from your releases.
+              </Text>
+              <Button
+                label="Connect Meta Business"
+                onPress={() => setShowMetaForm(true)}
+                variant="secondary"
+                style={{ marginTop: spacing.md }}
+              />
+            </>
+          )}
         </Card>
       )}
 

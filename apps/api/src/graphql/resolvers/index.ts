@@ -4,6 +4,7 @@ import { releaseResolvers } from './release';
 import { epkResolvers } from './epk';
 import { outreachResolvers } from './outreach';
 import { billingResolvers } from './billing';
+import { videoAdsResolvers } from './videoAds';
 
 function mergeResolvers(...resolverSets: Record<string, Record<string, unknown>>[]) {
   const merged: Record<string, Record<string, unknown>> = {};
@@ -21,5 +22,6 @@ export const resolvers = mergeResolvers(
   releaseResolvers,
   epkResolvers,
   outreachResolvers,
-  billingResolvers
+  billingResolvers,
+  videoAdsResolvers
 );

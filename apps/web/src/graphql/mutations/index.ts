@@ -274,6 +274,66 @@ export const DELETE_OUTREACH_MUTATION = gql`
   }
 `;
 
+export const CONNECT_META_MUTATION = gql`
+  mutation ConnectMeta($accessToken: String!, $adAccountId: String!) {
+    connectMeta(accessToken: $accessToken, adAccountId: $adAccountId) {
+      id
+      metaConnected
+      metaAdAccountId
+    }
+  }
+`;
+
+export const DISCONNECT_META_MUTATION = gql`
+  mutation DisconnectMeta {
+    disconnectMeta {
+      id
+      metaConnected
+      metaAdAccountId
+    }
+  }
+`;
+
+export const CREATE_META_AD_CAMPAIGN_MUTATION = gql`
+  mutation CreateMetaAdCampaign(
+    $releaseId: ID!
+    $videoUrl: String!
+    $pageId: String!
+    $instagramActorId: String
+    $campaignName: String!
+    $dailyBudgetCents: Int!
+    $durationDays: Int!
+    $message: String!
+  ) {
+    createMetaAdCampaign(
+      releaseId: $releaseId
+      videoUrl: $videoUrl
+      pageId: $pageId
+      instagramActorId: $instagramActorId
+      campaignName: $campaignName
+      dailyBudgetCents: $dailyBudgetCents
+      durationDays: $durationDays
+      message: $message
+    ) {
+      campaignId
+      adSetId
+      adId
+      campaignUrl
+    }
+  }
+`;
+
+export const SAVE_VIDEO_SELECTION_MUTATION = gql`
+  mutation SaveVideoSelection($releaseId: ID!, $videoUrls: [String!]!) {
+    saveVideoSelection(releaseId: $releaseId, videoUrls: $videoUrls) {
+      id
+      selectedVideoUrls
+      status
+      createdAt
+    }
+  }
+`;
+
 export const CREATE_STRIPE_CHECKOUT_MUTATION = gql`
   mutation CreateStripeCheckout {
     createStripeCheckout

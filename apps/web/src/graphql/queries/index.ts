@@ -8,6 +8,8 @@ export const ME_QUERY = gql`
       name
       plan
       emailVerified
+      metaConnected
+      metaAdAccountId
       createdAt
       releases {
         id
@@ -70,6 +72,48 @@ export const RELEASE_QUERY = gql`
         zipUrl
         generatedAt
       }
+      videoAdCampaign {
+        id
+        selectedVideoUrls
+        status
+        createdAt
+      }
+    }
+  }
+`;
+
+export const META_AD_ACCOUNTS_QUERY = gql`
+  query MetaAdAccounts {
+    metaAdAccounts {
+      id
+      name
+      currency
+    }
+  }
+`;
+
+export const META_PAGES_QUERY = gql`
+  query MetaPages {
+    metaPages {
+      id
+      name
+      instagramActorId
+    }
+  }
+`;
+
+export const SEARCH_VIDEOS_QUERY = gql`
+  query SearchVideosForRelease($releaseId: ID!) {
+    searchVideosForRelease(releaseId: $releaseId) {
+      id
+      url
+      thumbnailUrl
+      previewUrl
+      duration
+      width
+      height
+      photographer
+      photographerUrl
     }
   }
 `;

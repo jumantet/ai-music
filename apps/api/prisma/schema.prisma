@@ -27,39 +27,53 @@ enum OutreachStatus {
 }
 
 model User {
-  id               String    @id @default(cuid())
-  email            String    @unique
-  name             String
-  password         String
-  plan             Plan      @default(FREE)
-  stripeCustomerId String?
-  emailVerified    Boolean   @default(false)
-  verifyToken      String?   @unique
-  releases         Release[]
-  contacts         Contact[]
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  email             String    @unique
+  name              String
+  password          String
+  plan              Plan      @default(FREE)
+  stripeCustomerId  String?
+  emailVerified     Boolean   @default(false)
+  verifyToken       String?   @unique
+  metaAccessToken   String?
+  metaAdAccountId   String?
+  releases          Release[]
+  contacts          Contact[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 model Release {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title       String
-  artistName  String
-  genre       String?
-  mood        String?
-  bpm         Float?
-  trackUrl    String?
-  coverUrl    String?
-  city        String?
-  influences  String?
-  shortBio    String?
-  epkPage     EPKPage?
-  pressKit    PressKit?
-  outreaches  Outreach[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  artistName      String
+  genre           String?
+  mood            String?
+  bpm             Float?
+  trackUrl        String?
+  coverUrl        String?
+  city            String?
+  influences      String?
+  shortBio        String?
+  epkPage         EPKPage?
+  pressKit        PressKit?
+  outreaches      Outreach[]
+  videoAdCampaign VideoAdCampaign?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model VideoAdCampaign {
+  id                String   @id @default(cuid())
+  releaseId         String   @unique
+  release           Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  selectedVideoUrls String[]
+  metaCampaignId    String?
+  status            String   @default("draft")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model EPKPage {

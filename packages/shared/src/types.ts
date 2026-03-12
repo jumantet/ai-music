@@ -13,6 +13,8 @@ export interface User {
   email: string;
   name: string;
   plan: Plan;
+  metaConnected?: boolean;
+  metaAdAccountId?: string;
   createdAt: string;
 }
 
@@ -31,6 +33,28 @@ export interface Release {
   shortBio?: string;
   epkPage?: EPKPage;
   pressKit?: PressKit;
+  videoAdCampaign?: VideoAdCampaign;
+  createdAt: string;
+}
+
+export interface PexelsVideo {
+  id: string;
+  url: string;
+  thumbnailUrl: string;
+  previewUrl: string;
+  duration: number;
+  width: number;
+  height: number;
+  photographer: string;
+  photographerUrl: string;
+}
+
+export interface VideoAdCampaign {
+  id: string;
+  releaseId: string;
+  selectedVideoUrls: string[];
+  metaCampaignId?: string;
+  status: string;
   createdAt: string;
 }
 

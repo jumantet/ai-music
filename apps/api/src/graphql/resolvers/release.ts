@@ -31,7 +31,7 @@ export const releaseResolvers = {
       requireAuth(ctx.user);
       const release = await prisma.release.findFirst({
         where: { id, userId: ctx.user.id },
-        include: { epkPage: true, pressKit: true },
+        include: { epkPage: true, pressKit: true, videoAdCampaign: true },
       });
       if (!release) throw new Error('Release not found');
       return release;
@@ -41,7 +41,7 @@ export const releaseResolvers = {
       requireAuth(ctx.user);
       return prisma.release.findMany({
         where: { userId: ctx.user.id },
-        include: { epkPage: true, pressKit: true },
+        include: { epkPage: true, pressKit: true, videoAdCampaign: true },
         orderBy: { createdAt: 'desc' },
       });
     },
@@ -65,7 +65,7 @@ export const releaseResolvers = {
 
       return prisma.release.create({
         data: { ...input, userId: ctx.user.id },
-        include: { epkPage: true, pressKit: true },
+        include: { epkPage: true, pressKit: true, videoAdCampaign: true },
       });
     },
 
@@ -83,7 +83,7 @@ export const releaseResolvers = {
       return prisma.release.update({
         where: { id },
         data: input,
-        include: { epkPage: true, pressKit: true },
+        include: { epkPage: true, pressKit: true, videoAdCampaign: true },
       });
     },
 
@@ -111,7 +111,7 @@ export const releaseResolvers = {
       return prisma.release.update({
         where: { id: releaseId },
         data: { coverUrl: fileUrl },
-        include: { epkPage: true, pressKit: true },
+        include: { epkPage: true, pressKit: true, videoAdCampaign: true },
       });
     },
 
@@ -140,7 +140,7 @@ export const releaseResolvers = {
           ...(genre && { genre }),
           ...(mood && { mood }),
         },
-        include: { epkPage: true, pressKit: true },
+        include: { epkPage: true, pressKit: true, videoAdCampaign: true },
       });
     },
 
