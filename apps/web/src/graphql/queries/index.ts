@@ -11,73 +11,77 @@ export const ME_QUERY = gql`
       metaConnected
       metaAdAccountId
       createdAt
-      releases {
+      campaigns {
         id
-        title
+        trackTitle
         artistName
-        genre
-        mood
-        coverUrl
         trackUrl
-        city
-        influences
-        shortBio
+        mood
+        status
+        hookStart
+        hookEnd
+        metaCampaignId
         createdAt
-        epkPage {
+        generatedAds {
           id
-          slug
-          isPublished
-          bio
-          pressPitch
-          shortBio
-          releaseDescription
-        }
-        pressKit {
-          id
-          zipUrl
-          generatedAt
+          videoUrl
+          visualStyle
+          textOverlay
+          metaAdId
         }
       }
     }
   }
 `;
 
-export const RELEASE_QUERY = gql`
-  query Release($id: ID!) {
-    release(id: $id) {
+export const CAMPAIGN_QUERY = gql`
+  query Campaign($id: ID!) {
+    campaign(id: $id) {
       id
-      title
+      trackTitle
       artistName
-      genre
-      mood
-      bpm
       trackUrl
-      coverUrl
-      city
-      influences
-      shortBio
+      mood
+      status
+      hookStart
+      hookEnd
+      metaCampaignId
       createdAt
-      epkPage {
+      generatedAds {
         id
-        slug
-        bio
-        pressPitch
-        shortBio
-        releaseDescription
-        isPublished
+        videoUrl
+        visualStyle
+        textOverlay
+        metaAdId
         createdAt
       }
-      pressKit {
-        id
-        zipUrl
-        generatedAt
-      }
-      videoAdCampaign {
-        id
-        selectedVideoUrls
-        status
-        createdAt
-      }
+    }
+  }
+`;
+
+export const SUGGEST_HOOKS_QUERY = gql`
+  query SuggestHooks($campaignId: ID!) {
+    suggestHooks(campaignId: $campaignId) {
+      start
+      end
+      label
+      energy
+    }
+  }
+`;
+
+export const SEARCH_VIDEOS_FOR_MOOD_QUERY = gql`
+  query SearchVideosForMood($mood: String!) {
+    searchVideosForMood(mood: $mood) {
+      id
+      url
+      thumbnailUrl
+      previewUrl
+      duration
+      width
+      height
+      photographer
+      photographerUrl
     }
   }
 `;
@@ -98,86 +102,6 @@ export const META_PAGES_QUERY = gql`
       id
       name
       instagramActorId
-    }
-  }
-`;
-
-export const SEARCH_VIDEOS_QUERY = gql`
-  query SearchVideosForRelease($releaseId: ID!) {
-    searchVideosForRelease(releaseId: $releaseId) {
-      id
-      url
-      thumbnailUrl
-      previewUrl
-      duration
-      width
-      height
-      photographer
-      photographerUrl
-    }
-  }
-`;
-
-export const EPK_PAGE_QUERY = gql`
-  query EPKPage($slug: String!) {
-    epkPage(slug: $slug) {
-      id
-      slug
-      bio
-      pressPitch
-      shortBio
-      releaseDescription
-      isPublished
-      release {
-        id
-        title
-        artistName
-        genre
-        mood
-        coverUrl
-        trackUrl
-        city
-        influences
-      }
-    }
-  }
-`;
-
-export const CONTACTS_QUERY = gql`
-  query Contacts {
-    contacts {
-      id
-      name
-      email
-      type
-      website
-      notes
-      createdAt
-    }
-  }
-`;
-
-export const OUTREACH_QUERY = gql`
-  query Outreach($releaseId: ID!) {
-    outreach(releaseId: $releaseId) {
-      id
-      subject
-      body
-      status
-      sentAt
-      repliedAt
-      createdAt
-      contact {
-        id
-        name
-        email
-        type
-      }
-      release {
-        id
-        title
-        artistName
-      }
     }
   }
 `;

@@ -1,10 +1,8 @@
 import { authResolvers } from './auth';
 import { userResolvers } from './user';
-import { releaseResolvers } from './release';
-import { epkResolvers } from './epk';
-import { outreachResolvers } from './outreach';
+import { campaignResolvers } from './campaign';
+import { metaAdsResolvers } from './metaAds';
 import { billingResolvers } from './billing';
-import { videoAdsResolvers } from './videoAds';
 
 function mergeResolvers(...resolverSets: Record<string, Record<string, unknown>>[]) {
   const merged: Record<string, Record<string, unknown>> = {};
@@ -19,9 +17,7 @@ function mergeResolvers(...resolverSets: Record<string, Record<string, unknown>>
 export const resolvers = mergeResolvers(
   authResolvers,
   userResolvers,
-  releaseResolvers,
-  epkResolvers,
-  outreachResolvers,
-  billingResolvers,
-  videoAdsResolvers
+  campaignResolvers,
+  metaAdsResolvers,
+  billingResolvers
 );

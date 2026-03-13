@@ -1,39 +1,58 @@
 export type Plan = 'FREE' | 'PRO';
 
-export type ContactType = 'BLOG' | 'RADIO' | 'PLAYLIST' | 'JOURNALIST';
+export type CampaignStatus = 'DRAFT' | 'GENERATING' | 'READY' | 'LAUNCHED';
 
-export type OutreachStatus =
-  | 'NOT_CONTACTED'
-  | 'SENT'
-  | 'REPLIED'
-  | 'FEATURED';
+export type AdMood =
+  | 'dreamy'
+  | 'night_drive'
+  | 'indie'
+  | 'psychedelic'
+  | 'vintage'
+  | 'urban';
 
 export interface User {
   id: string;
   email: string;
   name: string;
   plan: Plan;
+  emailVerified: boolean;
   metaConnected?: boolean;
   metaAdAccountId?: string;
   createdAt: string;
+  campaigns: Campaign[];
 }
 
-export interface Release {
+export interface Campaign {
   id: string;
   userId: string;
-  title: string;
+  trackTitle: string;
   artistName: string;
-  genre?: string;
-  mood?: string;
-  bpm?: number;
+  trackS3Key?: string;
   trackUrl?: string;
-  coverUrl?: string;
-  city?: string;
-  influences?: string;
-  shortBio?: string;
-  epkPage?: EPKPage;
-  pressKit?: PressKit;
-  videoAdCampaign?: VideoAdCampaign;
+  hookStart?: number;
+  hookEnd?: number;
+  mood?: AdMood;
+  status: CampaignStatus;
+  generatedAds: GeneratedAd[];
+  metaCampaignId?: string;
+  createdAt: string;
+}
+
+export interface HookSuggestion {
+  start: number;
+  end: number;
+  label: string;
+  energy: 'high' | 'chorus' | 'build';
+}
+
+export interface GeneratedAd {
+  id: string;
+  campaignId: string;
+  videoS3Key?: string;
+  videoUrl?: string;
+  visualStyle: string;
+  textOverlay?: string;
+  metaAdId?: string;
   createdAt: string;
 }
 
@@ -47,57 +66,4 @@ export interface PexelsVideo {
   height: number;
   photographer: string;
   photographerUrl: string;
-}
-
-export interface VideoAdCampaign {
-  id: string;
-  releaseId: string;
-  selectedVideoUrls: string[];
-  metaCampaignId?: string;
-  status: string;
-  createdAt: string;
-}
-
-export interface EPKPage {
-  id: string;
-  releaseId: string;
-  slug: string;
-  bio?: string;
-  pressPitch?: string;
-  shortBio?: string;
-  releaseDescription?: string;
-  isPublished: boolean;
-  release?: Release;
-}
-
-export interface PressKit {
-  id: string;
-  releaseId: string;
-  zipUrl: string;
-  generatedAt: string;
-}
-
-export interface Contact {
-  id: string;
-  userId: string;
-  name: string;
-  email: string;
-  type: ContactType;
-  website?: string;
-  notes?: string;
-  createdAt: string;
-}
-
-export interface Outreach {
-  id: string;
-  contactId: string;
-  releaseId: string;
-  subject: string;
-  body: string;
-  status: OutreachStatus;
-  sentAt?: string;
-  repliedAt?: string;
-  contact?: Contact;
-  release?: Release;
-  createdAt: string;
 }

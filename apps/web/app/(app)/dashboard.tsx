@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Image,
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useQuery } from '@apollo/client';
@@ -18,7 +17,7 @@ import { useTheme } from '../../src/hooks/useTheme';
 import { useIsMobile } from '../../src/hooks/useIsMobile';
 import { spacing, fontSize, radius, fonts } from '../../src/theme';
 import type { ColorPalette } from '../../src/theme';
-import type { Release } from '@toolkit/shared';
+import type { Campaign } from '@toolkit/shared';
 
 const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
   StyleSheet.create({
@@ -31,7 +30,6 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
       alignSelf: 'center',
     },
 
-    // Hero greeting
     hero: {
       backgroundColor: colors.primary,
       borderRadius: radius.xl,
@@ -77,25 +75,12 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
       color: colors.primary,
     },
 
-    // Stats row
     statsRow: {
       flexDirection: 'row',
       gap: spacing.md,
       flexWrap: isMobile ? 'wrap' : 'nowrap',
     },
-    statCard: { flex: 1, alignItems: 'center', paddingTop: spacing.lg, paddingBottom: spacing.lg, gap: spacing.xs, overflow: 'hidden' },
-    statStrip: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
-    statValue: { fontFamily: fonts.extraBold, fontSize: 36, lineHeight: 44 },
-    statLabel: {
-      fontFamily: fonts.semiBold,
-      fontSize: fontSize.xs,
-      color: colors.textSecondary,
-      textTransform: 'uppercase',
-      letterSpacing: 0.8,
-      textAlign: 'center',
-    },
 
-    // Upgrade banner
     upgradeBanner: {
       borderColor: colors.primary,
       borderWidth: 1.5,
@@ -120,17 +105,14 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
     upgradeSubtitle: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary },
     upgradeBtn: { marginTop: spacing.xs, alignSelf: 'flex-start' },
 
-    // Section
     section: { gap: spacing.md },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-    sectionAccent: { width: 3, height: 20, borderRadius: 2, backgroundColor: colors.primary },
     sectionTitle: { fontFamily: fonts.bold, fontSize: fontSize.xl, color: colors.textPrimary },
+    viewAllText: { color: colors.primary, fontSize: fontSize.sm, fontFamily: fonts.semiBold },
 
     muted: { color: colors.textMuted, fontFamily: fonts.regular },
     errorText: { color: colors.error, fontSize: fontSize.sm },
 
-    // Empty state
     emptyInner: { alignItems: 'center', gap: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.lg },
     emptyIconBox: {
       width: 72,
@@ -150,19 +132,19 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
       lineHeight: 22,
     },
 
-    // Release rows
-    releaseInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-    releaseCover: { width: 52, height: 52, borderRadius: radius.md },
-    releaseCoverPlaceholder: {
-      width: 52, height: 52, borderRadius: radius.md,
-      backgroundColor: colors.primaryBg, alignItems: 'center', justifyContent: 'center',
+    campaignInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    campaignThumb: {
+      width: 52,
+      height: 52,
+      borderRadius: radius.md,
+      backgroundColor: colors.primaryBg,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    releaseInfo: { flex: 1, gap: 3 },
-    releaseTitle: { fontFamily: fonts.semiBold, fontSize: fontSize.md, color: colors.textPrimary },
-    releaseArtist: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary },
-    releaseBadges: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap', marginTop: 4 },
-    viewAll: { paddingTop: spacing.xs, paddingBottom: spacing.xs },
-    viewAllText: { color: colors.primary, fontSize: fontSize.sm, fontFamily: fonts.semiBold },
+    campaignInfo: { flex: 1, gap: 3 },
+    campaignTitle: { fontFamily: fonts.semiBold, fontSize: fontSize.md, color: colors.textPrimary },
+    campaignArtist: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary },
+    campaignMeta: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap', marginTop: 4 },
   });
 
 function StatCard({ label, value, icon, accentColor }: {
@@ -182,29 +164,40 @@ function StatCard({ label, value, icon, accentColor }: {
   );
 }
 
-function ReleaseRow({ release, colors }: { release: Release; colors: ColorPalette }) {
+function statusVariant(status: string): 'default' | 'success' | 'warning' | 'info' {
+  if (status === 'LAUNCHED') return 'success';
+  if (status === 'READY') return 'info';
+  if (status === 'GENERATING') return 'warning';
+  return 'default';
+}
+
+function statusLabel(status: string, t: (k: string) => string): string {
+  if (status === 'LAUNCHED') return t('dashboard.badgeLaunched');
+  if (status === 'READY') return t('dashboard.badgeReady');
+  if (status === 'GENERATING') return t('dashboard.badgeGenerating');
+  return status;
+}
+
+function CampaignRow({ campaign, colors }: { campaign: Campaign; colors: ColorPalette }) {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
   return (
-    <Link href={`/(app)/releases/${release.id}` as any} asChild>
+    <Link href={`/(app)/campaigns/${campaign.id}` as any} asChild>
       <TouchableOpacity>
         <Card padding="md">
-          <View style={styles.releaseInner}>
-            {release.coverUrl ? (
-              <Image source={{ uri: release.coverUrl }} style={styles.releaseCover} />
-            ) : (
-              <View style={styles.releaseCoverPlaceholder}>
-                <Ionicons name="musical-notes" size={22} color={colors.primary} />
-              </View>
-            )}
-            <View style={styles.releaseInfo}>
-              <Text style={styles.releaseTitle} numberOfLines={1}>{release.title}</Text>
-              <Text style={styles.releaseArtist} numberOfLines={1}>{release.artistName}</Text>
-              <View style={styles.releaseBadges}>
-                {release.genre ? <Badge label={release.genre} variant="default" /> : null}
-                {release.epkPage?.isPublished ? <Badge label={t('dashboard.badgeEpkLive')} variant="success" /> : null}
-                {release.pressKit ? <Badge label={t('dashboard.badgePressKit')} variant="info" /> : null}
+          <View style={styles.campaignInner}>
+            <View style={styles.campaignThumb}>
+              <Ionicons name="film-outline" size={24} color={colors.primary} />
+            </View>
+            <View style={styles.campaignInfo}>
+              <Text style={styles.campaignTitle} numberOfLines={1}>{campaign.trackTitle}</Text>
+              <Text style={styles.campaignArtist} numberOfLines={1}>{campaign.artistName}</Text>
+              <View style={styles.campaignMeta}>
+                <Badge label={statusLabel(campaign.status, t)} variant={statusVariant(campaign.status)} />
+                {campaign.generatedAds?.length > 0 && (
+                  <Badge label={`${campaign.generatedAds.length} ads`} variant="default" />
+                )}
               </View>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
@@ -224,8 +217,11 @@ export default function DashboardScreen() {
   const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
 
   const user = data?.me;
-  const releases: Release[] = user?.releases ?? [];
+  const campaigns: Campaign[] = user?.campaigns ?? [];
   const firstName = user?.name?.split(' ')[0] ?? '';
+
+  const adsGenerated = campaigns.reduce((sum: number, c: Campaign) => sum + (c.generatedAds?.length ?? 0), 0);
+  const launched = campaigns.filter((c: Campaign) => c.status === 'LAUNCHED').length;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
@@ -238,13 +234,13 @@ export default function DashboardScreen() {
             {firstName ? t('dashboard.welcome', { name: firstName }) : t('dashboard.welcomeAnon')}
           </Text>
           <Text style={styles.heroSubtitle}>
-            {releases.length === 0
+            {campaigns.length === 0
               ? t('dashboard.subtitleEmpty')
-              : t('dashboard.subtitleReleases', { count: releases.length })}
+              : t('dashboard.subtitleCampaigns', { count: campaigns.length })}
           </Text>
         </View>
-        <TouchableOpacity style={styles.heroBtn} onPress={() => router.push('/(app)/releases/new')}>
-          <Text style={styles.heroBtnText}>{t('dashboard.newRelease')}</Text>
+        <TouchableOpacity style={styles.heroBtn} onPress={() => router.push('/(app)/campaigns/new')}>
+          <Text style={styles.heroBtnText}>{t('dashboard.newCampaign')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -268,19 +264,17 @@ export default function DashboardScreen() {
       )}
 
       <View style={styles.statsRow}>
-        <StatCard label={t('dashboard.statReleases')} value={releases.length.toString()} icon="musical-notes" accentColor={colors.white} />
-        <StatCard label={t('dashboard.statEpk')} value={releases.filter((r) => r.epkPage?.isPublished).length.toString()} icon="globe-outline" accentColor={colors.white} />
-        <StatCard label={t('dashboard.statPressKits')} value={releases.filter((r) => r.pressKit).length.toString()} icon="document-text" accentColor={colors.white} />
+        <StatCard label={t('dashboard.statCampaigns')} value={campaigns.length.toString()} icon="film-outline" accentColor={colors.white} />
+        <StatCard label={t('dashboard.statAdsGenerated')} value={adsGenerated.toString()} icon="play-circle-outline" accentColor={colors.white} />
+        <StatCard label={t('dashboard.statLaunched')} value={launched.toString()} icon="rocket-outline" accentColor={colors.white} />
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>{t('dashboard.recentReleases')}</Text>
-          </View>
-          {releases.length > 5 && (
-            <Link href="/(app)/releases" asChild>
-              <TouchableOpacity style={styles.viewAll}>
+          <Text style={styles.sectionTitle}>{t('dashboard.recentCampaigns')}</Text>
+          {campaigns.length > 5 && (
+            <Link href="/(app)/campaigns" asChild>
+              <TouchableOpacity>
                 <Text style={styles.viewAllText}>{t('dashboard.seeAll')}</Text>
               </TouchableOpacity>
             </Link>
@@ -290,24 +284,24 @@ export default function DashboardScreen() {
         {loading ? <Text style={styles.muted}>{t('common.loading')}</Text> : null}
         {error ? <Text style={styles.errorText}>{t('dashboard.errorLoad')}</Text> : null}
 
-        {!loading && releases.length === 0 ? (
+        {!loading && campaigns.length === 0 ? (
           <Card>
             <View style={styles.emptyInner}>
               <View style={styles.emptyIconBox}>
-                <Ionicons name="musical-notes" size={32} color={colors.primary} />
+                <Ionicons name="film-outline" size={32} color={colors.primary} />
               </View>
               <Text style={styles.emptyTitle}>{t('dashboard.emptyTitle')}</Text>
               <Text style={styles.emptySubtitle}>{t('dashboard.emptySubtitle')}</Text>
               <Button
                 label={t('dashboard.createFirst')}
-                onPress={() => router.push('/(app)/releases/new')}
+                onPress={() => router.push('/(app)/campaigns/new')}
               />
             </View>
           </Card>
         ) : null}
 
-        {releases.slice(0, 5).map((release) => (
-          <ReleaseRow key={release.id} release={release} colors={colors} />
+        {campaigns.slice(0, 5).map((campaign: Campaign) => (
+          <CampaignRow key={campaign.id} campaign={campaign} colors={colors} />
         ))}
       </View>
     </ScrollView>

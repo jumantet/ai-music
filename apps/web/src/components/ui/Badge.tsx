@@ -52,23 +52,26 @@ export function Badge({ label, variant = 'default' }: BadgeProps) {
   );
 }
 
-import type { OutreachStatus } from '@toolkit/shared';
+import type { CampaignStatus } from '@toolkit/shared';
 
-const STATUS_VARIANT: Record<OutreachStatus, BadgeVariant> = {
-  NOT_CONTACTED: 'default',
-  SENT: 'info',
-  REPLIED: 'warning',
-  FEATURED: 'success',
+const CAMPAIGN_STATUS_VARIANT: Record<CampaignStatus, BadgeVariant> = {
+  DRAFT: 'default',
+  GENERATING: 'warning',
+  READY: 'info',
+  LAUNCHED: 'success',
 };
 
-const STATUS_I18N_KEYS: Record<OutreachStatus, string> = {
-  NOT_CONTACTED: 'badge.notContacted',
-  SENT: 'badge.sent',
-  REPLIED: 'badge.replied',
-  FEATURED: 'badge.featured',
+const CAMPAIGN_STATUS_I18N_KEYS: Record<CampaignStatus, string> = {
+  DRAFT: 'badge.draft',
+  GENERATING: 'badge.generating',
+  READY: 'badge.ready',
+  LAUNCHED: 'badge.launched',
 };
 
-export function OutreachStatusBadge({ status }: { status: OutreachStatus }) {
+export function CampaignStatusBadge({ status }: { status: CampaignStatus }) {
   const { t } = useTranslation();
-  return <Badge label={t(STATUS_I18N_KEYS[status])} variant={STATUS_VARIANT[status]} />;
+  return <Badge label={t(CAMPAIGN_STATUS_I18N_KEYS[status])} variant={CAMPAIGN_STATUS_VARIANT[status]} />;
 }
+
+/** @deprecated Use CampaignStatusBadge instead */
+export const OutreachStatusBadge = CampaignStatusBadge as unknown as React.FC<{ status: string }>;

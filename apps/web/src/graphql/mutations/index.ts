@@ -51,226 +51,58 @@ export const SIGNUP_MUTATION = gql`
   }
 `;
 
-export const CREATE_RELEASE_MUTATION = gql`
-  mutation CreateRelease($input: CreateReleaseInput!) {
-    createRelease(input: $input) {
+export const CREATE_CAMPAIGN_MUTATION = gql`
+  mutation CreateCampaign($trackTitle: String!, $artistName: String!) {
+    createCampaign(trackTitle: $trackTitle, artistName: $artistName) {
       id
-      title
+      trackTitle
       artistName
-      genre
-      mood
-      city
-      influences
-      shortBio
-      createdAt
-    }
-  }
-`;
-
-export const UPDATE_RELEASE_MUTATION = gql`
-  mutation UpdateRelease($id: ID!, $input: UpdateReleaseInput!) {
-    updateRelease(id: $id, input: $input) {
-      id
-      title
-      artistName
-      genre
-      mood
-      bpm
-      city
-      influences
-      shortBio
-    }
-  }
-`;
-
-export const DELETE_RELEASE_MUTATION = gql`
-  mutation DeleteRelease($id: ID!) {
-    deleteRelease(id: $id)
-  }
-`;
-
-export const GET_UPLOAD_URL_MUTATION = gql`
-  mutation GetUploadUrl($releaseId: ID!, $fileType: String!, $contentType: String!) {
-    getUploadUrl(releaseId: $releaseId, fileType: $fileType, contentType: $contentType) {
-      uploadUrl
-      fileUrl
-      key
-    }
-  }
-`;
-
-export const SET_RELEASE_COVER_MUTATION = gql`
-  mutation SetReleaseCover($releaseId: ID!, $fileUrl: String!) {
-    setReleaseCover(releaseId: $releaseId, fileUrl: $fileUrl) {
-      id
-      coverUrl
-    }
-  }
-`;
-
-export const SET_RELEASE_TRACK_MUTATION = gql`
-  mutation SetReleaseTrack($releaseId: ID!, $fileUrl: String!, $bpm: Float, $genre: String, $mood: String) {
-    setReleaseTrack(releaseId: $releaseId, fileUrl: $fileUrl, bpm: $bpm, genre: $genre, mood: $mood) {
-      id
-      trackUrl
-      bpm
-      genre
-      mood
-    }
-  }
-`;
-
-export const GENERATE_EPK_MUTATION = gql`
-  mutation GenerateEPK($releaseId: ID!) {
-    generateEPK(releaseId: $releaseId) {
-      id
-      slug
-      bio
-      pressPitch
-      shortBio
-      releaseDescription
-      isPublished
-    }
-  }
-`;
-
-export const UPDATE_EPK_PAGE_MUTATION = gql`
-  mutation UpdateEPKPage(
-    $releaseId: ID!
-    $bio: String
-    $pressPitch: String
-    $shortBio: String
-    $releaseDescription: String
-  ) {
-    updateEPKPage(
-      releaseId: $releaseId
-      bio: $bio
-      pressPitch: $pressPitch
-      shortBio: $shortBio
-      releaseDescription: $releaseDescription
-    ) {
-      id
-      bio
-      pressPitch
-      shortBio
-      releaseDescription
-    }
-  }
-`;
-
-export const PUBLISH_EPK_MUTATION = gql`
-  mutation PublishEPKPage($releaseId: ID!) {
-    publishEPKPage(releaseId: $releaseId) {
-      id
-      slug
-      isPublished
-    }
-  }
-`;
-
-export const UNPUBLISH_EPK_MUTATION = gql`
-  mutation UnpublishEPKPage($releaseId: ID!) {
-    unpublishEPKPage(releaseId: $releaseId) {
-      id
-      slug
-      isPublished
-    }
-  }
-`;
-
-export const GENERATE_PRESS_KIT_MUTATION = gql`
-  mutation GeneratePressKit($releaseId: ID!) {
-    generatePressKit(releaseId: $releaseId) {
-      id
-      zipUrl
-      generatedAt
-    }
-  }
-`;
-
-export const CREATE_CONTACT_MUTATION = gql`
-  mutation CreateContact($input: CreateContactInput!) {
-    createContact(input: $input) {
-      id
-      name
-      email
-      type
-      website
-      notes
-      createdAt
-    }
-  }
-`;
-
-export const UPDATE_CONTACT_MUTATION = gql`
-  mutation UpdateContact($id: ID!, $input: UpdateContactInput!) {
-    updateContact(id: $id, input: $input) {
-      id
-      name
-      email
-      type
-      website
-      notes
-    }
-  }
-`;
-
-export const DELETE_CONTACT_MUTATION = gql`
-  mutation DeleteContact($id: ID!) {
-    deleteContact(id: $id)
-  }
-`;
-
-export const GENERATE_OUTREACH_EMAIL_MUTATION = gql`
-  mutation GenerateOutreachEmail($releaseId: ID!, $contactType: ContactType!, $contactName: String) {
-    generateOutreachEmail(releaseId: $releaseId, contactType: $contactType, contactName: $contactName) {
-      subject
-      body
-    }
-  }
-`;
-
-export const CREATE_OUTREACH_MUTATION = gql`
-  mutation CreateOutreach($releaseId: ID!, $contactId: ID!, $subject: String!, $body: String!) {
-    createOutreach(releaseId: $releaseId, contactId: $contactId, subject: $subject, body: $body) {
-      id
-      subject
-      body
       status
-      contact {
+      createdAt
+    }
+  }
+`;
+
+export const UPDATE_CAMPAIGN_MUTATION = gql`
+  mutation UpdateCampaign($id: ID!, $hookStart: Float, $hookEnd: Float, $mood: String, $trackS3Key: String) {
+    updateCampaign(id: $id, hookStart: $hookStart, hookEnd: $hookEnd, mood: $mood, trackS3Key: $trackS3Key) {
+      id
+      hookStart
+      hookEnd
+      mood
+      status
+    }
+  }
+`;
+
+export const GENERATE_ADS_MUTATION = gql`
+  mutation GenerateAds($campaignId: ID!) {
+    generateAds(campaignId: $campaignId) {
+      id
+      status
+      generatedAds {
         id
-        name
-        email
-        type
+        videoUrl
+        visualStyle
+        textOverlay
       }
     }
   }
 `;
 
-export const UPDATE_OUTREACH_STATUS_MUTATION = gql`
-  mutation UpdateOutreachStatus($id: ID!, $status: OutreachStatus!) {
-    updateOutreachStatus(id: $id, status: $status) {
-      id
-      status
-      sentAt
-      repliedAt
-    }
+export const DELETE_CAMPAIGN_MUTATION = gql`
+  mutation DeleteCampaign($id: ID!) {
+    deleteCampaign(id: $id)
   }
 `;
 
-export const SEND_OUTREACH_EMAIL_MUTATION = gql`
-  mutation SendOutreachEmail($id: ID!) {
-    sendOutreachEmail(id: $id) {
-      id
-      status
-      sentAt
+export const GET_UPLOAD_URL_MUTATION = gql`
+  mutation GetUploadUrl($campaignId: ID!, $fileType: String!, $contentType: String!) {
+    getUploadUrl(campaignId: $campaignId, fileType: $fileType, contentType: $contentType) {
+      uploadUrl
+      fileUrl
+      key
     }
-  }
-`;
-
-export const DELETE_OUTREACH_MUTATION = gql`
-  mutation DeleteOutreach($id: ID!) {
-    deleteOutreach(id: $id)
   }
 `;
 
@@ -294,10 +126,10 @@ export const DISCONNECT_META_MUTATION = gql`
   }
 `;
 
-export const CREATE_META_AD_CAMPAIGN_MUTATION = gql`
-  mutation CreateMetaAdCampaign(
-    $releaseId: ID!
-    $videoUrl: String!
+export const LAUNCH_META_AD_MUTATION = gql`
+  mutation LaunchMetaAd(
+    $campaignId: ID!
+    $adId: ID!
     $pageId: String!
     $instagramActorId: String
     $campaignName: String!
@@ -305,9 +137,9 @@ export const CREATE_META_AD_CAMPAIGN_MUTATION = gql`
     $durationDays: Int!
     $message: String!
   ) {
-    createMetaAdCampaign(
-      releaseId: $releaseId
-      videoUrl: $videoUrl
+    launchMetaAd(
+      campaignId: $campaignId
+      adId: $adId
       pageId: $pageId
       instagramActorId: $instagramActorId
       campaignName: $campaignName
@@ -319,17 +151,6 @@ export const CREATE_META_AD_CAMPAIGN_MUTATION = gql`
       adSetId
       adId
       campaignUrl
-    }
-  }
-`;
-
-export const SAVE_VIDEO_SELECTION_MUTATION = gql`
-  mutation SaveVideoSelection($releaseId: ID!, $videoUrls: [String!]!) {
-    saveVideoSelection(releaseId: $releaseId, videoUrls: $videoUrls) {
-      id
-      selectedVideoUrls
-      status
-      createdAt
     }
   }
 `;

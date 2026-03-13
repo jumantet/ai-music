@@ -21,22 +21,15 @@ const NAV_ITEMS_CONFIG = [
     key: "sidebar.dashboard",
     path: "/dashboard",
     href: "/(app)/dashboard",
-    icon: "home-outline",
-    activeIcon: "home",
+    icon: "grid-outline",
+    activeIcon: "grid",
   },
   {
-    key: "sidebar.releases",
-    path: "/releases",
-    href: "/(app)/releases",
-    icon: "musical-notes-outline",
-    activeIcon: "musical-notes",
-  },
-  {
-    key: "sidebar.contacts",
-    path: "/contacts",
-    href: "/(app)/contacts",
-    icon: "people-outline",
-    activeIcon: "people",
+    key: "sidebar.campaigns",
+    path: "/campaigns",
+    href: "/(app)/campaigns",
+    icon: "film-outline",
+    activeIcon: "film",
   },
   {
     key: "sidebar.settings",
@@ -178,7 +171,7 @@ export function Sidebar() {
       <View style={styles.top}>
         <View style={styles.logo}>
           <View style={styles.logoIcon}>
-            <Text style={styles.logoEmoji}>🎵</Text>
+            <Text style={styles.logoEmoji}>📱</Text>
           </View>
           <View style={styles.logoTextBlock}>
             <Text style={styles.logoText}>{t("sidebar.appName")}</Text>

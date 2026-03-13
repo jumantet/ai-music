@@ -26,12 +26,12 @@ import { spacing, fontSize, radius, fonts } from '../../src/theme';
 import type { ColorPalette } from '../../src/theme';
 
 const PRO_FEATURE_KEYS = [
-  'settings.featureUnlimitedReleases',
-  'settings.featureUnlimitedEpk',
-  'settings.featureUnlimitedOutreach',
-  'settings.featurePressKit',
+  'settings.featureUnlimitedCampaigns',
+  'settings.featureHookFinder',
+  'settings.featureMultipleAds',
+  'settings.featureMetaLaunch',
   'settings.featurePriorityAI',
-  'settings.featureEmailSending',
+  'settings.featureExport',
 ];
 
 const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
@@ -205,9 +205,9 @@ export default function SettingsScreen() {
             <View>
               <Text style={styles.upgradeTitle}>{t('settings.upgradeTitle')}</Text>
               <Text style={styles.upgradePrice}>
-                {t('settings.upgradePrice').split('€12')[0]}
-                <Text style={styles.priceHighlight}>€12</Text>
-                {t('settings.upgradePrice').split('€12')[1]}
+                {t('settings.upgradePrice').split('€19')[0]}
+                <Text style={styles.priceHighlight}>€19</Text>
+                {t('settings.upgradePrice').split('€19')[1]}
               </Text>
             </View>
             <View style={styles.proStarBadge}>
@@ -250,7 +250,7 @@ export default function SettingsScreen() {
           {metaConnected ? (
             <>
               <Text style={styles.metaDesc}>
-                Your Meta Business account is connected. You can create Instagram ad campaigns directly from the Video Ads tab on each release.
+                Your Meta Business account is connected. You can launch Instagram & Facebook ad campaigns directly from any campaign's Campaign tab.
               </Text>
               <Button
                 label={disconnectingMeta ? 'Disconnecting...' : 'Disconnect Meta'}
@@ -297,7 +297,7 @@ export default function SettingsScreen() {
           ) : (
             <>
               <Text style={styles.metaDesc}>
-                Connect your Meta Business account to create Instagram Reels & Stories ad campaigns directly from your releases.
+                Connect your Meta Business account to launch Instagram Reels & Stories ad campaigns directly from your generated ads.
               </Text>
               <Button
                 label="Connect Meta Business"

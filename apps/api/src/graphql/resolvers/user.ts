@@ -3,12 +3,22 @@ import { requireAuth } from '../../middleware/auth';
 import type { AuthContext } from '../../middleware/auth';
 
 export const userResolvers = {
+  User: {
+    metaConnected: (user: { metaAccessToken?: string | null }) =>
+      Boolean(user.metaAccessToken),
+  },
+
   Query: {
     me: async (_: unknown, __: unknown, ctx: AuthContext) => {
       requireAuth(ctx.user);
       return prisma.user.findUniqueOrThrow({
         where: { id: ctx.user.id },
-        include: { releases: { orderBy: { createdAt: 'desc' } } },
+        include: {
+          campaigns: {
+            orderBy: { createdAt: 'desc' },
+            include: { generatedAds: true },
+          },
+        },
       });
     },
   },
