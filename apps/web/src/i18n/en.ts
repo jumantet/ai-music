@@ -156,6 +156,13 @@ const en = {
       videosTitle: 'Matching visuals',
       videosLoading: 'Finding matching videos...',
       videosNone: 'No videos found for this mood.',
+      videoSourceStock: 'Stock videos',
+      videoSourceOwn: 'Your video',
+      uploadVideoLabel: 'Upload your video',
+      uploadVideoHint: 'MP4, MOV or WebM — max 500MB. Vertical (9:16) works best.',
+      uploadVideoUploading: 'Uploading video...',
+      uploadVideoUploaded: 'Video uploaded',
+      uploadVideoSubtitle: "We'll auto-crop it to 9:16 and sync your hook.",
 
       // Step 4 - Generate
       generateTitle: 'Generating your ads',

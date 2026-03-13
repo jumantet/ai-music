@@ -35,6 +35,8 @@ export const typeDefs = `#graphql
     hookStart: Float
     hookEnd: Float
     mood: String
+    customVideoS3Key: String
+    customVideoUrl: String
     status: CampaignStatus!
     metaCampaignId: String
     generatedAds: [GeneratedAd!]!
@@ -124,6 +126,7 @@ export const typeDefs = `#graphql
       hookEnd: Float
       mood: String
       trackS3Key: String
+      customVideoS3Key: String
     ): Campaign!
     deleteCampaign(id: ID!): Boolean!
     generateAds(campaignId: ID!): Campaign!

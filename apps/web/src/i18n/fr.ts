@@ -153,6 +153,13 @@ const fr = {
       videosTitle: 'Visuels correspondants',
       videosLoading: 'Recherche de vidéos…',
       videosNone: 'Aucune vidéo trouvée pour ce mood.',
+      videoSourceStock: 'Vidéos stock',
+      videoSourceOwn: 'Ta vidéo',
+      uploadVideoLabel: 'Upload ta vidéo',
+      uploadVideoHint: 'MP4, MOV ou WebM — max 500 Mo. Vertical (9:16) recommandé.',
+      uploadVideoUploading: 'Upload en cours…',
+      uploadVideoUploaded: 'Vidéo uploadée',
+      uploadVideoSubtitle: "On va la recadrer en 9:16 et synchroniser ton hook.",
 
       generateTitle: 'Génération de tes ads',
       generateSubtitle: 'On génère {{count}} variations d\'ads pour toi.',

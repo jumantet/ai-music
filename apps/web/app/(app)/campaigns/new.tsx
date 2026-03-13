@@ -216,6 +216,29 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
     moodChipLabelSelected: { color: colors.primary },
     moodChipLabelIdle: { color: colors.textSecondary },
 
+    // Video source tab switcher
+    videoTabRow: {
+      flexDirection: 'row',
+      backgroundColor: colors.bgElevated,
+      borderRadius: radius.lg,
+      padding: 3,
+      gap: 3,
+    },
+    videoTab: {
+      flex: 1,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.sm,
+      borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: spacing.xs,
+    },
+    videoTabActive: { backgroundColor: colors.bg },
+    videoTabLabel: { fontFamily: fonts.semiBold, fontSize: fontSize.sm },
+    videoTabLabelActive: { color: colors.textPrimary },
+    videoTabLabelIdle: { color: colors.textMuted },
+
     // Video grid
     videoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     videoThumb: {
@@ -351,6 +374,10 @@ export default function NewCampaignScreen() {
   // Step 3
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [selectedVideoUrls, setSelectedVideoUrls] = useState<string[]>([]);
+  const [videoSource, setVideoSource] = useState<'stock' | 'own'>('stock');
+  const [customVideoS3Key, setCustomVideoS3Key] = useState('');
+  const [customVideoUploaded, setCustomVideoUploaded] = useState(false);
+  const [videoUploading, setVideoUploading] = useState(false);
 
   // Step 4
   const [generateProgress, setGenerateProgress] = useState(0);
@@ -409,6 +436,35 @@ export default function NewCampaignScreen() {
     }
   }
 
+  async function handleUploadVideo() {
+    if (!campaignId) return;
+    setVideoUploading(true);
+    setError(null);
+    try {
+      if (Platform.OS === 'web') {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'video/mp4,video/quicktime,video/webm,video/*';
+        input.onchange = async (e: Event) => {
+          const file = (e.target as HTMLInputElement).files?.[0];
+          if (!file) { setVideoUploading(false); return; }
+          const { data } = await getUploadUrl({
+            variables: { campaignId, fileType: 'custom-video', contentType: file.type },
+          });
+          const { uploadUrl, key } = data.getUploadUrl;
+          await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+          setCustomVideoS3Key(key);
+          setCustomVideoUploaded(true);
+          setVideoUploading(false);
+        };
+        input.click();
+      }
+    } catch {
+      setError('Video upload failed. Please try again.');
+      setVideoUploading(false);
+    }
+  }
+
   async function handleStep1Continue() {
     if (!trackTitle.trim() || !artistName.trim()) {
       setError(t('campaigns.new.errorRequired'));
@@ -443,7 +499,13 @@ export default function NewCampaignScreen() {
   async function handleStep3Continue() {
     if (!selectedMood || !campaignId) return;
     setError(null);
-    await updateCampaign({ variables: { id: campaignId, mood: selectedMood } });
+    await updateCampaign({
+      variables: {
+        id: campaignId,
+        mood: selectedMood,
+        ...(videoSource === 'own' && customVideoS3Key ? { customVideoS3Key } : {}),
+      },
+    });
     setStep(4);
     simulateGenerate();
   }
@@ -668,7 +730,30 @@ export default function NewCampaignScreen() {
               })}
             </View>
 
-            {selectedMood && (
+            {/* Video source tab switcher */}
+            <View style={styles.videoTabRow}>
+              {(['stock', 'own'] as const).map((src) => {
+                const isActive = videoSource === src;
+                const icon = src === 'stock' ? 'images-outline' : 'cloud-upload-outline';
+                const label = src === 'stock' ? t('campaigns.new.videoSourceStock') : t('campaigns.new.videoSourceOwn');
+                return (
+                  <TouchableOpacity
+                    key={src}
+                    style={[styles.videoTab, isActive && styles.videoTabActive]}
+                    onPress={() => setVideoSource(src)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name={icon} size={15} color={isActive ? colors.primary : colors.textMuted} />
+                    <Text style={[styles.videoTabLabel, isActive ? styles.videoTabLabelActive : styles.videoTabLabelIdle]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Stock videos tab */}
+            {videoSource === 'stock' && selectedMood && (
               <>
                 <Text style={styles.sectionLabel}>{t('campaigns.new.videosTitle')}</Text>
                 {videosLoading ? (
@@ -704,12 +789,49 @@ export default function NewCampaignScreen() {
               </>
             )}
 
+            {/* Own video tab */}
+            {videoSource === 'own' && (
+              <>
+                <Text style={styles.sectionLabel}>{t('campaigns.new.videoSourceOwn').toUpperCase()}</Text>
+                {customVideoUploaded ? (
+                  <View style={styles.uploadedRow}>
+                    <Ionicons name="videocam" size={20} color={colors.success} />
+                    <Text style={styles.uploadedText}>{t('campaigns.new.uploadVideoUploaded')}</Text>
+                    <TouchableOpacity onPress={() => { setCustomVideoUploaded(false); setCustomVideoS3Key(''); }}>
+                      <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.uploadZone, videoUploading ? styles.uploadZoneActive : styles.uploadZoneIdle]}
+                    onPress={handleUploadVideo}
+                    activeOpacity={0.7}
+                    disabled={videoUploading || !campaignId}
+                  >
+                    {videoUploading ? (
+                      <ActivityIndicator color={colors.primary} />
+                    ) : (
+                      <Ionicons name="videocam-outline" size={32} color={colors.textMuted} />
+                    )}
+                    <Text style={styles.uploadZoneLabel}>
+                      {videoUploading ? t('campaigns.new.uploadVideoUploading') : t('campaigns.new.uploadVideoLabel')}
+                    </Text>
+                    <Text style={styles.uploadZoneHint}>{t('campaigns.new.uploadVideoHint')}</Text>
+                  </TouchableOpacity>
+                )}
+                <Text style={[styles.muted, { fontSize: fontSize.xs, textAlign: 'center', lineHeight: 18 }]}>
+                  {t('campaigns.new.uploadVideoSubtitle')}
+                </Text>
+              </>
+            )}
+
             <View style={styles.actions}>
               <Button label={t('common.back')} variant="secondary" onPress={() => setStep(2)} />
               <Button
                 label={t('campaigns.new.continueBtn')}
                 onPress={handleStep3Continue}
-                disabled={!selectedMood}
+                disabled={!selectedMood || (videoSource === 'own' && !customVideoUploaded && !videoUploading)}
+                loading={videoUploading}
               />
             </View>
           </View>

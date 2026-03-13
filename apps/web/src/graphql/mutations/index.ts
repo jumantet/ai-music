@@ -64,12 +64,14 @@ export const CREATE_CAMPAIGN_MUTATION = gql`
 `;
 
 export const UPDATE_CAMPAIGN_MUTATION = gql`
-  mutation UpdateCampaign($id: ID!, $hookStart: Float, $hookEnd: Float, $mood: String, $trackS3Key: String) {
-    updateCampaign(id: $id, hookStart: $hookStart, hookEnd: $hookEnd, mood: $mood, trackS3Key: $trackS3Key) {
+  mutation UpdateCampaign($id: ID!, $hookStart: Float, $hookEnd: Float, $mood: String, $trackS3Key: String, $customVideoS3Key: String) {
+    updateCampaign(id: $id, hookStart: $hookStart, hookEnd: $hookEnd, mood: $mood, trackS3Key: $trackS3Key, customVideoS3Key: $customVideoS3Key) {
       id
       hookStart
       hookEnd
       mood
+      customVideoS3Key
+      customVideoUrl
       status
     }
   }

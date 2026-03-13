@@ -90,6 +90,7 @@ export const campaignResolvers = {
         hookEnd?: number;
         mood?: string;
         trackS3Key?: string;
+        customVideoS3Key?: string;
       },
       ctx: AuthContext
     ) => {
@@ -107,6 +108,10 @@ export const campaignResolvers = {
       if (data.trackS3Key !== undefined) {
         updateData.trackS3Key = data.trackS3Key;
         updateData.trackUrl = getPublicUrl(data.trackS3Key);
+      }
+      if (data.customVideoS3Key !== undefined) {
+        updateData.customVideoS3Key = data.customVideoS3Key;
+        updateData.customVideoUrl = getPublicUrl(data.customVideoS3Key);
       }
 
       return prisma.campaign.update({
@@ -142,18 +147,23 @@ export const campaignResolvers = {
       });
 
       const mood = campaign.mood ?? 'dreamy';
-      const keywords = MOOD_KEYWORDS[mood] ?? ['music visual aesthetic'];
-      let videoUrls: string[] = [];
-
-      try {
-        const videos = await searchVideos(keywords, 'portrait', 8);
-        videoUrls = videos.map((v) => v.previewUrl);
-      } catch {
-        // Continue without Pexels videos
-      }
-
       const hookStart = campaign.hookStart ?? 60;
       const hookEnd = campaign.hookEnd ?? 75;
+
+      // If the user uploaded their own video, use it for all 4 ads.
+      // Otherwise fall back to Pexels stock clips.
+      let videoUrls: string[] = [];
+      if (campaign.customVideoUrl) {
+        videoUrls = [campaign.customVideoUrl];
+      } else {
+        const keywords = MOOD_KEYWORDS[mood] ?? ['music visual aesthetic'];
+        try {
+          const videos = await searchVideos(keywords, 'portrait', 8);
+          videoUrls = videos.map((v) => v.previewUrl);
+        } catch {
+          // Continue without Pexels videos
+        }
+      }
 
       let variants: Array<{ visualStyle: string; textOverlay: string; videoS3Key: string; videoUrl: string }> = [];
 
@@ -165,6 +175,7 @@ export const campaignResolvers = {
           hookEnd,
           mood,
           videoUrls,
+          customVideoS3Key: campaign.customVideoS3Key ?? null,
           artistName: campaign.artistName,
           trackTitle: campaign.trackTitle,
         });

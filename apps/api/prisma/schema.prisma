@@ -41,12 +41,14 @@ model Campaign {
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   trackTitle     String
   artistName     String
-  trackS3Key     String?
-  trackUrl       String?
-  hookStart      Float?
-  hookEnd        Float?
-  mood           String?
-  status         CampaignStatus @default(DRAFT)
+  trackS3Key       String?
+  trackUrl         String?
+  hookStart        Float?
+  hookEnd          Float?
+  mood             String?
+  customVideoS3Key String?
+  customVideoUrl   String?
+  status           CampaignStatus @default(DRAFT)
   metaCampaignId String?
   generatedAds   GeneratedAd[]
   createdAt      DateTime       @default(now())

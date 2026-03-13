@@ -78,10 +78,11 @@ export async function generateAdVariants(params: {
   hookEnd: number;
   mood: string;
   videoUrls: string[];
+  customVideoS3Key?: string | null;
   artistName: string;
   trackTitle: string;
 }): Promise<AdVariant[]> {
-  const { campaignId, trackS3Key, hookStart, hookEnd, mood, videoUrls, artistName, trackTitle } = params;
+  const { campaignId, trackS3Key, hookStart, hookEnd, mood, videoUrls, customVideoS3Key, artistName, trackTitle } = params;
   const styles = MOOD_STYLES[mood] ?? DEFAULT_STYLES;
   const hookDuration = Math.min(hookEnd - hookStart, 15);
 
@@ -104,24 +105,47 @@ export async function generateAdVariants(params: {
       }
     }
 
+    // If a custom video was uploaded, download it once and reuse across all 4 ads
+    let sharedVideoPath: string | null = null;
+    if (customVideoS3Key) {
+      try {
+        const customVideoSignedUrl = await getSignedDownloadUrl(customVideoS3Key, 600);
+        const res = await fetch(customVideoSignedUrl);
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          sharedVideoPath = path.join(tmpDir, 'custom_video.mp4');
+          fs.writeFileSync(sharedVideoPath, buf);
+        }
+      } catch {
+        // Non-fatal: fall through to Pexels URLs
+      }
+    }
+
     const results: AdVariant[] = [];
 
     for (let i = 0; i < 4; i++) {
       const styleInfo = styles[i] ?? styles[0];
-      const videoUrl = videoUrls[i % videoUrls.length] ?? null;
+      // Use the custom video for every variation, or rotate through Pexels clips
+      const pexelsUrl = sharedVideoPath ? null : (videoUrls[i % videoUrls.length] ?? null);
 
       let outputKey: string | null = null;
       let outputUrl: string | null = null;
 
-      if (videoUrl && audioPath) {
+      if ((sharedVideoPath || pexelsUrl) && audioPath) {
         try {
-          // Download video clip
-          const videoRes = await fetch(videoUrl);
-          if (videoRes.ok) {
-            const videoBuf = Buffer.from(await videoRes.arrayBuffer());
-            const videoPath = path.join(tmpDir, `clip_${i}.mp4`);
-            fs.writeFileSync(videoPath, videoBuf);
+          let videoPath: string | null = sharedVideoPath;
 
+          if (!videoPath && pexelsUrl) {
+            // Download Pexels clip
+            const videoRes = await fetch(pexelsUrl);
+            if (videoRes.ok) {
+              const videoBuf = Buffer.from(await videoRes.arrayBuffer());
+              videoPath = path.join(tmpDir, `clip_${i}.mp4`);
+              fs.writeFileSync(videoPath, videoBuf);
+            }
+          }
+
+          if (videoPath) {
             const outputPath = path.join(tmpDir, `ad_${i}.mp4`);
             const text = `${styleInfo.text}\\n${artistName} - ${trackTitle}`;
 
