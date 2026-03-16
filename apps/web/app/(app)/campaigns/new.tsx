@@ -19,7 +19,7 @@ import {
   GET_UPLOAD_URL_MUTATION,
 } from '../../../src/graphql/mutations';
 import { SUGGEST_HOOKS_QUERY, SEARCH_VIDEOS_FOR_MOOD_QUERY, ME_QUERY } from '../../../src/graphql/queries';
-import { Button, Card, Input } from '../../../src/components/ui';
+import { Button, Card, Input, WaveformHookPicker } from '../../../src/components/ui';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useIsMobile } from '../../../src/hooks/useIsMobile';
 import { spacing, fontSize, radius, fonts } from '../../../src/theme';
@@ -365,6 +365,7 @@ export default function NewCampaignScreen() {
   const [trackUploaded, setTrackUploaded] = useState(false);
   const [trackS3Key, setTrackS3Key] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [pendingTrackFile, setPendingTrackFile] = useState<File | null>(null);
   const [campaignId, setCampaignId] = useState<string | null>(null);
 
   // Step 2
@@ -408,30 +409,39 @@ export default function NewCampaignScreen() {
   ];
 
   async function handleUploadTrack() {
-    if (!campaignId) return;
+    if (Platform.OS !== 'web') return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'audio/mpeg,audio/wav,audio/*';
+    input.onchange = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      setPendingTrackFile(file);
+      setTrackUploaded(true);
+    };
+    input.click();
+  }
+
+  async function uploadPendingTrack(id: string, file: File) {
     setUploading(true);
-    setError(null);
     try {
-      if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'audio/mpeg,audio/wav,audio/*';
-        input.onchange = async (e: Event) => {
-          const file = (e.target as HTMLInputElement).files?.[0];
-          if (!file) return;
-          const { data } = await getUploadUrl({
-            variables: { campaignId, fileType: 'track', contentType: file.type },
-          });
-          const { uploadUrl, key } = data.getUploadUrl;
-          await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
-          setTrackS3Key(key);
-          setTrackUploaded(true);
-          setUploading(false);
-        };
-        input.click();
+      const { data, errors } = await getUploadUrl({
+        variables: { campaignId: id, fileType: 'track', contentType: file.type },
+      });
+      if (errors?.length) throw new Error(errors[0].message);
+      const { uploadUrl, key } = data.getUploadUrl;
+      const res = await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText);
+        console.error('[upload] PUT failed', res.status, text);
+        throw new Error(`Storage error ${res.status}: ${text}`);
       }
-    } catch {
-      setError('Upload failed. Please try again.');
+      setTrackS3Key(key);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[upload] uploadPendingTrack error:', msg);
+      setError(`Upload failed: ${msg}`);
+    } finally {
       setUploading(false);
     }
   }
@@ -475,14 +485,33 @@ export default function NewCampaignScreen() {
       const { data } = await createCampaign({ variables: { trackTitle, artistName } });
       const id = data.createCampaign.id;
       setCampaignId(id);
-      setStep(2);
+      if (pendingTrackFile) {
+        await uploadPendingTrack(id, pendingTrackFile);
+      }
+      // Start loading hook suggestions in background while user picks mood/video
       loadHooks({ variables: { campaignId: id } });
+      setStep(2);
     } catch {
       setError('Failed to create campaign. Please try again.');
     }
   }
 
+  // Step 2 → 3 : mood + video confirmed, go to hook picker
   async function handleStep2Continue() {
+    if (!selectedMood || !campaignId) return;
+    setError(null);
+    await updateCampaign({
+      variables: {
+        id: campaignId,
+        mood: selectedMood,
+        ...(videoSource === 'own' && customVideoS3Key ? { customVideoS3Key } : {}),
+      },
+    });
+    setStep(3);
+  }
+
+  // Step 3 → 4 : hook confirmed, go to generate
+  async function handleStep3Continue() {
     if (!selectedHook || !campaignId) return;
     setError(null);
     await updateCampaign({
@@ -491,19 +520,6 @@ export default function NewCampaignScreen() {
         hookStart: selectedHook.start,
         hookEnd: selectedHook.end,
         trackS3Key: trackS3Key || undefined,
-      },
-    });
-    setStep(3);
-  }
-
-  async function handleStep3Continue() {
-    if (!selectedMood || !campaignId) return;
-    setError(null);
-    await updateCampaign({
-      variables: {
-        id: campaignId,
-        mood: selectedMood,
-        ...(videoSource === 'own' && customVideoS3Key ? { customVideoS3Key } : {}),
       },
     });
     setStep(4);
@@ -604,27 +620,22 @@ export default function NewCampaignScreen() {
               placeholder={t('campaigns.new.artistNamePlaceholder')}
             />
 
-            {trackUploaded ? (
+            {pendingTrackFile ? (
               <View style={styles.uploadedRow}>
                 <Ionicons name="musical-notes" size={20} color={colors.success} />
-                <Text style={styles.uploadedText}>{t('campaigns.new.trackUploaded')}</Text>
-                <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                <Text style={styles.uploadedText} numberOfLines={1}>{pendingTrackFile.name}</Text>
+                <TouchableOpacity onPress={() => { setPendingTrackFile(null); setTrackUploaded(false); }}>
+                  <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                </TouchableOpacity>
               </View>
             ) : (
               <TouchableOpacity
-                style={[styles.uploadZone, uploading ? styles.uploadZoneActive : styles.uploadZoneIdle]}
+                style={[styles.uploadZone, styles.uploadZoneIdle]}
                 onPress={handleUploadTrack}
                 activeOpacity={0.7}
-                disabled={uploading}
               >
-                {uploading ? (
-                  <ActivityIndicator color={colors.primary} />
-                ) : (
-                  <Ionicons name="cloud-upload-outline" size={32} color={colors.textMuted} />
-                )}
-                <Text style={styles.uploadZoneLabel}>
-                  {uploading ? t('campaigns.new.uploading') : t('campaigns.new.uploadTrackLabel')}
-                </Text>
+                <Ionicons name="cloud-upload-outline" size={32} color={colors.textMuted} />
+                <Text style={styles.uploadZoneLabel}>{t('campaigns.new.uploadTrackLabel')}</Text>
                 <Text style={styles.uploadZoneHint}>{t('campaigns.new.uploadTrackHint')}</Text>
               </TouchableOpacity>
             )}
@@ -640,71 +651,8 @@ export default function NewCampaignScreen() {
         </Card>
       )}
 
-      {/* ── STEP 2: Hook Finder ── */}
+      {/* ── STEP 2: Mood & Visuals ── */}
       {step === 2 && (
-        <Card padding="lg">
-          <View style={styles.stepCard}>
-            <Text style={styles.stepTitle}>{t('campaigns.new.hookTitle')}</Text>
-            <Text style={styles.stepSubtitle}>{t('campaigns.new.hookSubtitle')}</Text>
-
-            {hooksLoading ? (
-              <View style={{ alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.md }}>
-                <ActivityIndicator color={colors.primary} size="large" />
-                <Text style={styles.muted}>{t('campaigns.new.hookAnalyzing')}</Text>
-              </View>
-            ) : (
-              <>
-                <Text style={styles.sectionLabel}>{t('campaigns.new.hookSuggestedLabel')}</Text>
-                <View style={styles.hookList}>
-                  {(hookSuggestions.length > 0
-                    ? hookSuggestions
-                    : [
-                        { start: 25, end: 40, label: 'chorus', energy: 'chorus' as const },
-                        { start: 42, end: 57, label: 'high energy', energy: 'high' as const },
-                        { start: 55, end: 70, label: 'melodic build', energy: 'build' as const },
-                      ]
-                  ).map((hook, i) => {
-                    const isSelected = selectedHook === hook || (selectedHook?.start === hook.start && selectedHook?.end === hook.end);
-                    return (
-                      <TouchableOpacity
-                        key={i}
-                        style={[styles.hookCard, isSelected ? styles.hookCardSelected : styles.hookCardIdle]}
-                        onPress={() => setSelectedHook(hook)}
-                        activeOpacity={0.8}
-                      >
-                        <View style={{ width: 40, height: 40, borderRadius: radius.lg, backgroundColor: isSelected ? colors.primaryBg : colors.bgCard, alignItems: 'center', justifyContent: 'center' }}>
-                          <Ionicons name="musical-notes" size={20} color={isSelected ? colors.primary : colors.textMuted} />
-                        </View>
-                        <View style={styles.hookInfo}>
-                          <Text style={styles.hookTimestamp}>
-                            {formatTime(hook.start)} — {formatTime(hook.end)}
-                          </Text>
-                          <Text style={styles.hookLabel}>{energyLabel(hook.energy, t)}</Text>
-                        </View>
-                        <View style={[styles.hookCheckbox, isSelected ? styles.hookCheckboxSelected : styles.hookCheckboxIdle]}>
-                          {isSelected && <Ionicons name="checkmark" size={13} color={colors.white} />}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </>
-            )}
-
-            <View style={styles.actions}>
-              <Button label={t('common.back')} variant="secondary" onPress={() => setStep(1)} />
-              <Button
-                label={t('campaigns.new.continueBtn')}
-                onPress={handleStep2Continue}
-                disabled={!selectedHook}
-              />
-            </View>
-          </View>
-        </Card>
-      )}
-
-      {/* ── STEP 3: Mood & Visuals ── */}
-      {step === 3 && (
         <Card padding="lg">
           <View style={styles.stepCard}>
             <Text style={styles.stepTitle}>{t('campaigns.new.moodTitle')}</Text>
@@ -826,12 +774,47 @@ export default function NewCampaignScreen() {
             )}
 
             <View style={styles.actions}>
+              <Button label={t('common.back')} variant="secondary" onPress={() => setStep(1)} />
+              <Button
+                label={t('campaigns.new.continueBtn')}
+                onPress={handleStep2Continue}
+                disabled={!selectedMood || (videoSource === 'own' && !customVideoUploaded && !videoUploading)}
+                loading={videoUploading}
+              />
+            </View>
+          </View>
+        </Card>
+      )}
+
+      {/* ── STEP 3: Hook — Waveform Timeline ── */}
+      {step === 3 && (
+        <Card padding="lg">
+          <View style={styles.stepCard}>
+            <Text style={styles.stepTitle}>{t('campaigns.new.hookTitle')}</Text>
+            <Text style={styles.stepSubtitle}>{t('campaigns.new.hookSubtitle')}</Text>
+
+            <WaveformHookPicker
+              audioFile={pendingTrackFile}
+              suggestions={
+                hookSuggestions.length > 0
+                  ? hookSuggestions
+                  : [
+                      { start: 25, end: 40, label: 'chorus', energy: 'chorus' as const },
+                      { start: 42, end: 57, label: 'high energy', energy: 'high' as const },
+                      { start: 58, end: 73, label: 'melodic build', energy: 'build' as const },
+                    ]
+              }
+              selected={selectedHook}
+              onSelect={setSelectedHook}
+              loading={hooksLoading}
+            />
+
+            <View style={styles.actions}>
               <Button label={t('common.back')} variant="secondary" onPress={() => setStep(2)} />
               <Button
                 label={t('campaigns.new.continueBtn')}
                 onPress={handleStep3Continue}
-                disabled={!selectedMood || (videoSource === 'own' && !customVideoUploaded && !videoUploading)}
-                loading={videoUploading}
+                disabled={!selectedHook}
               />
             </View>
           </View>
