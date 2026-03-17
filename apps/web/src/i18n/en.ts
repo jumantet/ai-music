@@ -163,6 +163,11 @@ const en = {
       // Step 3 - Mood & Visuals
       moodTitle: 'Choose your mood',
       moodSubtitle: "We'll match royalty-free video clips to the feel of your music.",
+      moodAiSuggested: 'Suggested by AI based on your track',
+      moodAnalyzing: 'AI is analyzing your track…',
+      videoSearchPlaceholder: 'Search videos… (e.g. neon city night)',
+      videoSearchBtn: 'Search',
+      uploadVideoReplace: 'Replace',
       moodDreamy: 'Dreamy',
       moodNightDrive: 'Night Drive',
       moodIndie: 'Indie',

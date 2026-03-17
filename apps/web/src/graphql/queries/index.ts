@@ -70,9 +70,22 @@ export const SUGGEST_HOOKS_QUERY = gql`
   }
 `;
 
+export const SUGGEST_MOOD_QUERY = gql`
+  query SuggestMood($campaignId: ID!) {
+    suggestMood(campaignId: $campaignId) {
+      moods {
+        key
+        label
+        videoKeywords
+        icon
+      }
+    }
+  }
+`;
+
 export const SEARCH_VIDEOS_FOR_MOOD_QUERY = gql`
-  query SearchVideosForMood($mood: String!, $page: Int) {
-    searchVideosForMood(mood: $mood, page: $page) {
+  query SearchVideosForMood($mood: String!, $page: Int, $keywords: [String!]) {
+    searchVideosForMood(mood: $mood, page: $page, keywords: $keywords) {
       videos {
         id
         url

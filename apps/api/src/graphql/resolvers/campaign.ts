@@ -1,7 +1,7 @@
 import { prisma } from '../../services/prisma';
 import { requireAuth, requireVerified } from '../../middleware/auth';
 import { getPresignedUploadUrl, getPublicUrl } from '../../services/storage';
-import { suggestHooks } from '../../services/hookFinder';
+import { suggestHooks, detectMood } from '../../services/hookFinder';
 import { generateAdVariants } from '../../services/adGenerator';
 import { searchVideos } from '../../services/pexels';
 import type { AuthContext } from '../../middleware/auth';
@@ -54,14 +54,29 @@ export const campaignResolvers = {
       );
     },
 
+    suggestMood: async (
+      _: unknown,
+      { campaignId }: { campaignId: string },
+      ctx: AuthContext
+    ) => {
+      requireAuth(ctx.user);
+      const campaign = await prisma.campaign.findFirst({
+        where: { id: campaignId, userId: ctx.user.id },
+      });
+      if (!campaign) throw new Error('Campaign not found');
+      return detectMood(campaign.trackTitle, campaign.artistName);
+    },
+
     searchVideosForMood: async (
       _: unknown,
-      { mood, page = 1 }: { mood: string; page?: number },
+      { mood, page = 1, keywords: customKeywords }: { mood: string; page?: number; keywords?: string[] },
       ctx: AuthContext
     ) => {
       requireAuth(ctx.user);
 
-      const keywords = MOOD_KEYWORDS[mood] ?? ['music visual aesthetic', 'abstract motion', 'cinematic blur'];
+      const keywords = customKeywords?.length
+        ? customKeywords
+        : (MOOD_KEYWORDS[mood] ?? ['music visual aesthetic', 'abstract motion', 'cinematic blur']);
       return searchVideos(keywords, 'portrait', 8, page);
     },
   },

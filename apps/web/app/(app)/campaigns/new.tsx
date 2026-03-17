@@ -10,6 +10,8 @@ import {
   Modal,
   TouchableWithoutFeedback,
   Image,
+  Animated,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useLazyQuery } from '@apollo/client';
@@ -23,7 +25,7 @@ import {
 } from '../../../src/graphql/mutations';
 import { useMutation as useResendMutation } from '@apollo/client';
 import { RESEND_VERIFICATION_MUTATION } from '../../../src/graphql/mutations';
-import { SUGGEST_HOOKS_QUERY, SEARCH_VIDEOS_FOR_MOOD_QUERY, ME_QUERY } from '../../../src/graphql/queries';
+import { SUGGEST_HOOKS_QUERY, SUGGEST_MOOD_QUERY, SEARCH_VIDEOS_FOR_MOOD_QUERY, ME_QUERY } from '../../../src/graphql/queries';
 import { Button, Card, Input, WaveformHookPicker } from '../../../src/components/ui';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useIsMobile } from '../../../src/hooks/useIsMobile';
@@ -33,13 +35,18 @@ import type { HookSuggestion, PexelsVideo } from '@toolkit/shared';
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
-const MOODS = [
-  { key: 'dreamy', icon: 'partly-sunny-outline' as const },
-  { key: 'night_drive', icon: 'moon-outline' as const },
-  { key: 'indie', icon: 'musical-note-outline' as const },
-  { key: 'psychedelic', icon: 'color-palette-outline' as const },
-  { key: 'vintage', icon: 'camera-outline' as const },
-  { key: 'urban', icon: 'business-outline' as const },
+interface MoodOption {
+  key: string;
+  label: string;
+  videoKeywords: string[];
+  icon: string;
+}
+
+const DEFAULT_MOODS: MoodOption[] = [
+  { key: 'dreamy', label: 'Dreamy & Ethereal', videoKeywords: [], icon: 'partly-sunny-outline' },
+  { key: 'night_drive', label: 'Night Drive', videoKeywords: [], icon: 'moon-outline' },
+  { key: 'raw_indie', label: 'Raw Indie', videoKeywords: [], icon: 'musical-note-outline' },
+  { key: 'psychedelic', label: 'Psychedelic', videoKeywords: [], icon: 'color-palette-outline' },
 ];
 
 const GENERATE_STEPS = [
@@ -362,6 +369,45 @@ function energyLabel(energy: string, t: (k: string) => string): string {
 const COLS_DESKTOP = 4;
 const COLS_MOBILE = 2;
 
+function VideoSkeletonGrid({ isMobile, colors }: { isMobile: boolean; colors: ColorPalette }) {
+  const pulse = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse]);
+
+  const cols = isMobile ? COLS_MOBILE : COLS_DESKTOP;
+  const rows = 2;
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      {Array.from({ length: rows }).map((_, rowIdx) => (
+        <View key={rowIdx} style={{ flexDirection: 'row', gap: spacing.sm }}>
+          {Array.from({ length: cols }).map((_, colIdx) => (
+            <Animated.View
+              key={colIdx}
+              style={{
+                flex: 1,
+                aspectRatio: 9 / 16,
+                borderRadius: radius.md,
+                backgroundColor: colors.bgElevated,
+                opacity: pulse,
+              }}
+            />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function NewCampaignScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -386,12 +432,22 @@ export default function NewCampaignScreen() {
 
   // Step 3
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [aiSuggestedMood, setAiSuggestedMood] = useState<string | null>(null);
+  const [moodVideoKeywords, setMoodVideoKeywords] = useState<string[]>([]);
+  const [aiMoods, setAiMoods] = useState<MoodOption[] | null>(null);
+  const [moodsLoading, setMoodsLoading] = useState(false);
+
+  const displayMoods = aiMoods ?? DEFAULT_MOODS;
   const [selectedVideoUrls, setSelectedVideoUrls] = useState<string[]>([]);
   const [videoSource, setVideoSource] = useState<'stock' | 'own'>('stock');
   const [customVideoS3Key, setCustomVideoS3Key] = useState('');
   const [customVideoUploaded, setCustomVideoUploaded] = useState(false);
+  const [customVideoLocalUrl, setCustomVideoLocalUrl] = useState<string | null>(null);
+  const [customVideoFileName, setCustomVideoFileName] = useState('');
   const [videoUploading, setVideoUploading] = useState(false);
   const [previewVideo, setPreviewVideo] = useState<PexelsVideo | null>(null);
+  const [videoSearchQuery, setVideoSearchQuery] = useState('');
+  const [videoSearchActive, setVideoSearchActive] = useState(false);
 
   // Step 4
   const [generateProgress, setGenerateProgress] = useState(0);
@@ -441,6 +497,23 @@ export default function NewCampaignScreen() {
   const [loadHooks, { loading: hooksLoading }] = useLazyQuery(SUGGEST_HOOKS_QUERY, {
     onCompleted: (data) => {
       setHookSuggestions(data?.suggestHooks ?? []);
+    },
+  });
+
+  const [loadMoodSuggestion] = useLazyQuery(SUGGEST_MOOD_QUERY, {
+    onCompleted: (data) => {
+      const suggestion = data?.suggestMood;
+      if (!suggestion?.moods?.length) return;
+      const moods: MoodOption[] = suggestion.moods;
+      setAiMoods(moods);
+      setMoodsLoading(false);
+      // Auto-select the first (best) mood
+      const first = moods[0];
+      setAiSuggestedMood(first.key);
+      setMoodVideoKeywords(first.videoKeywords ?? []);
+      setSelectedMood(first.key);
+      setVideoPage(1);
+      loadVideos({ variables: { mood: first.key, page: 1, keywords: first.videoKeywords } });
     },
   });
 
@@ -561,6 +634,9 @@ export default function NewCampaignScreen() {
         input.onchange = async (e: Event) => {
           const file = (e.target as HTMLInputElement).files?.[0];
           if (!file) { setVideoUploading(false); return; }
+          const localUrl = URL.createObjectURL(file);
+          setCustomVideoLocalUrl(localUrl);
+          setCustomVideoFileName(file.name);
           const { data } = await getUploadUrl({
             variables: { campaignId, fileType: 'custom-video', contentType: file.type },
           });
@@ -603,6 +679,8 @@ export default function NewCampaignScreen() {
       setUploadStepIdx(2);
       animateProgressTo(92, 800);
       loadHooks({ variables: { campaignId: id } });
+      setMoodsLoading(true);
+      loadMoodSuggestion({ variables: { campaignId: id } });
 
       await new Promise((r) => setTimeout(r, 900));
       setUploadStepIdx(3);
@@ -679,12 +757,38 @@ export default function NewCampaignScreen() {
   function handleMoodSelect(mood: string) {
     setSelectedMood(mood);
     setVideoPage(1);
-    loadVideos({ variables: { mood, page: 1 } });
+    setVideoSearchQuery('');
+    setVideoSearchActive(false);
+    const moodOption = displayMoods.find((m) => m.key === mood);
+    const keywords = moodOption?.videoKeywords ?? [];
+    setMoodVideoKeywords(keywords);
+    loadVideos({ variables: { mood, page: 1, ...(keywords.length ? { keywords } : {}) } });
+  }
+
+  function handleVideoSearch() {
+    const q = videoSearchQuery.trim();
+    if (!q) return;
+    setVideoSearchActive(true);
+    setVideoPage(1);
+    const keywords = q.split(',').map((s) => s.trim()).filter(Boolean);
+    loadVideos({ variables: { mood: selectedMood ?? 'indie', page: 1, keywords } });
+  }
+
+  function handleVideoClearSearch() {
+    setVideoSearchQuery('');
+    setVideoSearchActive(false);
+    setVideoPage(1);
+    loadVideos({ variables: { mood: selectedMood, page: 1, ...(moodVideoKeywords.length ? { keywords: moodVideoKeywords } : {}) } });
   }
 
   function handleVideoPageChange(newPage: number) {
     setVideoPage(newPage);
-    loadVideos({ variables: { mood: selectedMood, page: newPage } });
+    if (videoSearchActive) {
+      const keywords = videoSearchQuery.split(',').map((s) => s.trim()).filter(Boolean);
+      loadVideos({ variables: { mood: selectedMood ?? 'indie', page: newPage, keywords } });
+    } else {
+      loadVideos({ variables: { mood: selectedMood, page: newPage, ...(moodVideoKeywords.length ? { keywords: moodVideoKeywords } : {}) } });
+    }
   }
 
   async function handleResendVerification() {
@@ -811,15 +915,19 @@ export default function NewCampaignScreen() {
             <Text style={styles.stepTitle}>{t('campaigns.new.moodTitle')}</Text>
             <Text style={styles.stepSubtitle}>{t('campaigns.new.moodSubtitle')}</Text>
 
-            {isMobile ? (
+            {moodsLoading ? (
+              <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.muted}>{t('campaigns.new.moodAnalyzing')}</Text>
+              </View>
+            ) : isMobile ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.moodGridMobile}
               >
-                {MOODS.map(({ key, icon }) => {
+                {displayMoods.map(({ key, label, icon }) => {
                   const isSelected = selectedMood === key;
-                  const label = t(`campaigns.new.mood${key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')}`);
                   return (
                     <TouchableOpacity
                       key={key}
@@ -827,7 +935,7 @@ export default function NewCampaignScreen() {
                       onPress={() => handleMoodSelect(key)}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name={icon} size={16} color={isSelected ? colors.primary : colors.textSecondary} />
+                      <Ionicons name={icon as any} size={16} color={isSelected ? colors.primary : colors.textSecondary} />
                       <Text style={[styles.moodChipLabel, isSelected ? styles.moodChipLabelSelected : styles.moodChipLabelIdle]}>
                         {label}
                       </Text>
@@ -837,9 +945,8 @@ export default function NewCampaignScreen() {
               </ScrollView>
             ) : (
               <View style={styles.moodGrid}>
-                {MOODS.map(({ key, icon }) => {
+                {displayMoods.map(({ key, label, icon }) => {
                   const isSelected = selectedMood === key;
-                  const label = t(`campaigns.new.mood${key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')}`);
                   return (
                     <TouchableOpacity
                       key={key}
@@ -847,13 +954,22 @@ export default function NewCampaignScreen() {
                       onPress={() => handleMoodSelect(key)}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name={icon} size={16} color={isSelected ? colors.primary : colors.textSecondary} />
+                      <Ionicons name={icon as any} size={16} color={isSelected ? colors.primary : colors.textSecondary} />
                       <Text style={[styles.moodChipLabel, isSelected ? styles.moodChipLabelSelected : styles.moodChipLabelIdle]}>
                         {label}
                       </Text>
                     </TouchableOpacity>
                   );
                 })}
+              </View>
+            )}
+
+            {aiSuggestedMood && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: -spacing.xs }}>
+                <Ionicons name="sparkles" size={13} color={colors.primary} />
+                <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.primary }}>
+                  {t('campaigns.new.moodAiSuggested')}
+                </Text>
               </View>
             )}
 
@@ -883,11 +999,64 @@ export default function NewCampaignScreen() {
             {videoSource === 'stock' && selectedMood && (
               <>
                 <Text style={styles.sectionLabel}>{t('campaigns.new.videosTitle')}</Text>
-                {videosLoading ? (
-                  <View style={{ alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.sm }}>
-                    <ActivityIndicator color={colors.primary} />
-                    <Text style={styles.muted}>{t('campaigns.new.videosLoading')}</Text>
+
+                {/* Search bar */}
+                <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+                  <View style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: colors.bgElevated,
+                    borderRadius: radius.lg,
+                    borderWidth: 1,
+                    borderColor: videoSearchActive ? colors.primary : colors.border,
+                    paddingHorizontal: spacing.md,
+                    gap: spacing.sm,
+                    height: 40,
+                  }}>
+                    <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+                    <TextInput
+                      value={videoSearchQuery}
+                      onChangeText={setVideoSearchQuery}
+                      onSubmitEditing={handleVideoSearch}
+                      placeholder={t('campaigns.new.videoSearchPlaceholder')}
+                      placeholderTextColor={colors.textMuted}
+                      returnKeyType="search"
+                      style={{
+                        flex: 1,
+                        fontFamily: fonts.regular,
+                        fontSize: fontSize.sm,
+                        color: colors.textPrimary,
+                        outlineStyle: 'none',
+                      } as any}
+                    />
+                    {videoSearchQuery.length > 0 && (
+                      <TouchableOpacity onPress={handleVideoClearSearch} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    )}
                   </View>
+                  <TouchableOpacity
+                    onPress={handleVideoSearch}
+                    disabled={!videoSearchQuery.trim() || videosLoading}
+                    style={{
+                      height: 40,
+                      paddingHorizontal: spacing.md,
+                      backgroundColor: colors.primary,
+                      borderRadius: radius.lg,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: !videoSearchQuery.trim() ? 0.4 : 1,
+                    }}
+                  >
+                    <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.white }}>
+                      {t('campaigns.new.videoSearchBtn')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {videosLoading ? (
+                  <VideoSkeletonGrid isMobile={isMobile} colors={colors} />
                 ) : videos.length === 0 ? (
                   <Text style={styles.muted}>{t('campaigns.new.videosNone')}</Text>
                 ) : videoGrid}
@@ -954,13 +1123,43 @@ export default function NewCampaignScreen() {
             {videoSource === 'own' && (
               <>
                 <Text style={styles.sectionLabel}>{t('campaigns.new.videoSourceOwn').toUpperCase()}</Text>
-                {customVideoUploaded ? (
-                  <View style={styles.uploadedRow}>
-                    <Ionicons name="videocam" size={20} color={colors.success} />
-                    <Text style={styles.uploadedText}>{t('campaigns.new.uploadVideoUploaded')}</Text>
-                    <TouchableOpacity onPress={() => { setCustomVideoUploaded(false); setCustomVideoS3Key(''); }}>
-                      <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-                    </TouchableOpacity>
+
+                {customVideoUploaded && customVideoLocalUrl ? (
+                  <View style={{ gap: spacing.sm }}>
+                    {/* Video player */}
+                    <View style={{
+                      width: '100%',
+                      maxWidth: 220,
+                      alignSelf: 'center',
+                      borderRadius: radius.xl,
+                      overflow: 'hidden',
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.black,
+                    }}>
+                      <View style={{ aspectRatio: 9 / 16 }}>
+                        {Platform.OS === 'web' && React.createElement('video', {
+                          src: customVideoLocalUrl,
+                          controls: true,
+                          loop: true,
+                          playsInline: true,
+                          style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
+                        })}
+                      </View>
+                    </View>
+
+                    {/* File name + replace button */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.bgElevated, borderRadius: radius.lg, padding: spacing.md }}>
+                      <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                      <Text style={[styles.uploadedText, { flex: 1 }]} numberOfLines={1}>{customVideoFileName}</Text>
+                      <TouchableOpacity
+                        onPress={() => { setCustomVideoUploaded(false); setCustomVideoS3Key(''); setCustomVideoLocalUrl(null); setCustomVideoFileName(''); }}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                      >
+                        <Ionicons name="refresh-outline" size={15} color={colors.textMuted} />
+                        <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted }}>{t('campaigns.new.uploadVideoReplace')}</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ) : (
                   <TouchableOpacity
@@ -980,6 +1179,7 @@ export default function NewCampaignScreen() {
                     <Text style={styles.uploadZoneHint}>{t('campaigns.new.uploadVideoHint')}</Text>
                   </TouchableOpacity>
                 )}
+
                 <Text style={[styles.muted, { fontSize: fontSize.xs, textAlign: 'center', lineHeight: 18 }]}>
                   {t('campaigns.new.uploadVideoSubtitle')}
                 </Text>

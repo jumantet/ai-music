@@ -3,6 +3,100 @@ import { getSignedDownloadUrl } from './storage';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+export interface MoodOption {
+  key: string;
+  label: string;
+  videoKeywords: string[];
+  icon: string;
+}
+
+export interface MoodSuggestion {
+  moods: MoodOption[];
+}
+
+const VALID_ICONS = [
+  'moon-outline', 'sunny-outline', 'partly-sunny-outline', 'musical-note-outline',
+  'color-palette-outline', 'camera-outline', 'business-outline', 'car-outline',
+  'flame-outline', 'heart-outline', 'star-outline', 'thunderstorm-outline',
+  'water-outline', 'leaf-outline', 'snow-outline', 'pulse-outline',
+];
+
+export async function detectMood(
+  trackTitle: string,
+  artistName: string
+): Promise<MoodSuggestion> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a music supervisor and creative director specializing in short-form video ads for Instagram and TikTok.
+Your task is to generate 4 unique mood/visual aesthetic options that would work well for a music track.
+Each mood should feel distinct and specific to the artist's sound — avoid generic categories.
+For each mood, provide Pexels video search keywords that would yield visually stunning, on-brand footage.
+
+Available icons (Ionicons): ${VALID_ICONS.join(', ')}
+
+Return ONLY valid JSON.`,
+        },
+        {
+          role: 'user',
+          content: `Track: "${trackTitle}" by ${artistName}
+
+Based on the artist name, track title, and genre/style clues you can infer, generate 4 distinct mood/visual aesthetic options for this track.
+Make the labels evocative and specific (e.g. "Dark Neon Hypnosis", "Melancholic City Rain", "Euphoric Highway Drive").
+
+Return JSON:
+{
+  "moods": [
+    {
+      "key": "<snake_case_unique_key>",
+      "label": "<evocative short label, 2-4 words>",
+      "videoKeywords": ["<pexels keyword 1>", "<pexels keyword 2>", "<pexels keyword 3>"],
+      "icon": "<one of the available Ionicons listed above>"
+    }
+  ]
+}
+
+Generate exactly 4 moods.`,
+        },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.75,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return getDefaultMoods();
+
+    const parsed = JSON.parse(content) as { moods: MoodOption[] };
+    const moods = parsed.moods ?? [];
+    if (moods.length === 0) return getDefaultMoods();
+
+    return {
+      moods: moods.slice(0, 4).map((m) => ({
+        key: m.key ?? 'mood',
+        label: m.label ?? 'Mood',
+        videoKeywords: (m.videoKeywords ?? []).slice(0, 3),
+        icon: VALID_ICONS.includes(m.icon) ? m.icon : 'musical-note-outline',
+      })),
+    };
+  } catch {
+    return getDefaultMoods();
+  }
+}
+
+function getDefaultMoods(): MoodSuggestion {
+  return {
+    moods: [
+      { key: 'dreamy', label: 'Dreamy & Ethereal', videoKeywords: ['golden hour bokeh', 'slow motion flowers', 'misty forest'], icon: 'partly-sunny-outline' },
+      { key: 'night_drive', label: 'Night Drive', videoKeywords: ['city lights night', 'neon street rain', 'highway timelapse'], icon: 'moon-outline' },
+      { key: 'raw_indie', label: 'Raw Indie', videoKeywords: ['film grain aesthetic', 'rooftop sunset', 'vintage camera footage'], icon: 'musical-note-outline' },
+      { key: 'urban_energy', label: 'Urban Energy', videoKeywords: ['city street crowd', 'skyscraper timelapse', 'metro rush hour'], icon: 'business-outline' },
+    ],
+  };
+}
+
 export interface HookSuggestion {
   start: number;
   end: number;

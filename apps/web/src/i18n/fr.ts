@@ -160,6 +160,11 @@ const fr = {
 
       moodTitle: 'Choisis ton mood',
       moodSubtitle: 'On va matcher des clips vidéo libres de droit avec l\'ambiance de ta musique.',
+      moodAiSuggested: 'Suggestion de l\'IA basée sur ton titre',
+      moodAnalyzing: 'L\'IA analyse ton titre…',
+      videoSearchPlaceholder: 'Rechercher des vidéos… (ex: nuit néon ville)',
+      videoSearchBtn: 'Rechercher',
+      uploadVideoReplace: 'Remplacer',
       moodDreamy: 'Rêveur',
       moodNightDrive: 'Night Drive',
       moodIndie: 'Indie',

@@ -61,6 +61,17 @@ export const typeDefs = `#graphql
     energy: String!
   }
 
+  type MoodOption {
+    key: String!
+    label: String!
+    videoKeywords: [String!]!
+    icon: String!
+  }
+
+  type MoodSuggestion {
+    moods: [MoodOption!]!
+  }
+
   type PexelsVideo {
     id: ID!
     url: String!
@@ -115,7 +126,8 @@ export const typeDefs = `#graphql
     campaign(id: ID!): Campaign!
     campaigns: [Campaign!]!
     suggestHooks(campaignId: ID!): [HookSuggestion!]!
-    searchVideosForMood(mood: String!, page: Int): PexelsVideosPage!
+    suggestMood(campaignId: ID!): MoodSuggestion!
+    searchVideosForMood(mood: String!, page: Int, keywords: [String!]): PexelsVideosPage!
     metaAdAccounts: [MetaAdAccount!]!
     metaPages: [MetaPage!]!
   }
