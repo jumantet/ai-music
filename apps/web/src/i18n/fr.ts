@@ -57,6 +57,13 @@ const fr = {
       sent: 'Email de vérification envoyé. Vérifiez votre boîte de réception.',
       resend: "Renvoyer l'email",
     },
+    verificationModal: {
+      title: 'Vérifiez votre email',
+      body: 'Cette action nécessite une adresse email vérifiée. Consultez votre boîte de réception ou renvoyez l\'email de vérification.',
+      resend: "Renvoyer l'email de vérification",
+      sent: 'Email envoyé ! Vérifiez votre boîte de réception.',
+      error: "Échec de l'envoi. Veuillez réessayer.",
+    },
   },
 
   sidebar: {
@@ -127,6 +134,15 @@ const fr = {
       continueBtn: 'Continuer →',
       errorRequired: 'Le titre et le nom de l\'artiste sont obligatoires',
       errorTrackRequired: 'Merci d\'uploader un morceau',
+      errorCreateFallback: 'Échec de la création. Veuillez réessayer.',
+
+      uploadOverlayStep0: 'Création de la campagne…',
+      uploadOverlayStep0Sub: 'On prépare ton projet',
+      uploadOverlayStep1: 'Upload du morceau…',
+      uploadOverlayStep2: 'Analyse des hooks…',
+      uploadOverlayStep2Sub: 'L\'IA détecte les moments les plus accrocheurs',
+      uploadOverlayStep3: 'C\'est prêt !',
+      uploadOverlayStep3Sub: 'Passage à l\'étape suivante…',
 
       hookTitle: 'Choisis ton hook',
       hookSubtitle: 'L\'IA a détecté les moments les plus accrocheurs de ton morceau. Choisis celui qui va capter l\'attention dans les 2 premières secondes.',
@@ -153,6 +169,8 @@ const fr = {
       videosTitle: 'Visuels correspondants',
       videosLoading: 'Recherche de vidéos…',
       videosNone: 'Aucune vidéo trouvée pour ce mood.',
+      videoSelect: 'Utiliser cette vidéo',
+      videoDeselect: 'Retirer la sélection',
       videoSourceStock: 'Vidéos stock',
       videoSourceOwn: 'Ta vidéo',
       uploadVideoLabel: 'Upload ta vidéo',

@@ -73,6 +73,13 @@ export const typeDefs = `#graphql
     photographerUrl: String!
   }
 
+  type PexelsVideosPage {
+    videos: [PexelsVideo!]!
+    totalResults: Int!
+    page: Int!
+    perPage: Int!
+  }
+
   type MetaAdAccount {
     id: ID!
     name: String!
@@ -108,7 +115,7 @@ export const typeDefs = `#graphql
     campaign(id: ID!): Campaign!
     campaigns: [Campaign!]!
     suggestHooks(campaignId: ID!): [HookSuggestion!]!
-    searchVideosForMood(mood: String!): [PexelsVideo!]!
+    searchVideosForMood(mood: String!, page: Int): PexelsVideosPage!
     metaAdAccounts: [MetaAdAccount!]!
     metaPages: [MetaPage!]!
   }

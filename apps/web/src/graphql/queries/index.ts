@@ -71,17 +71,22 @@ export const SUGGEST_HOOKS_QUERY = gql`
 `;
 
 export const SEARCH_VIDEOS_FOR_MOOD_QUERY = gql`
-  query SearchVideosForMood($mood: String!) {
-    searchVideosForMood(mood: $mood) {
-      id
-      url
-      thumbnailUrl
-      previewUrl
-      duration
-      width
-      height
-      photographer
-      photographerUrl
+  query SearchVideosForMood($mood: String!, $page: Int) {
+    searchVideosForMood(mood: $mood, page: $page) {
+      videos {
+        id
+        url
+        thumbnailUrl
+        previewUrl
+        duration
+        width
+        height
+        photographer
+        photographerUrl
+      }
+      totalResults
+      page
+      perPage
     }
   }
 `;

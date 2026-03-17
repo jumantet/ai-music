@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useApolloClient } from '@apollo/client';
 import { router } from 'expo-router';
 import { LOGIN_MUTATION, SIGNUP_MUTATION } from '../graphql/mutations';
-import { registerForceLogout } from '../graphql/authEvents';
+import { registerForceLogout, registerUnverifiedPrompt } from '../graphql/authEvents';
 
 interface AuthUser {
   id: string;
@@ -20,6 +20,9 @@ interface AuthContextValue {
   signup: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (user: AuthUser) => Promise<void>;
+  showVerificationModal: boolean;
+  triggerVerification: () => void;
+  dismissVerificationModal: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -27,6 +30,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
   const apolloClient = useApolloClient();
 
   const [loginMutation] = useMutation(LOGIN_MUTATION);
@@ -71,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       router.replace('/(auth)/login');
     });
+    registerUnverifiedPrompt(() => setShowVerificationModal(true));
   }, [apolloClient]);
 
   const updateUser = useCallback(async (updatedUser: AuthUser) => {
@@ -78,8 +83,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(updatedUser);
   }, []);
 
+  const triggerVerification = useCallback(() => {
+    setShowVerificationModal(true);
+  }, []);
+
+  const dismissVerificationModal = useCallback(() => {
+    setShowVerificationModal(false);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, signup, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, isLoading, login, signup, logout, updateUser, showVerificationModal, triggerVerification, dismissVerificationModal }}>
       {children}
     </AuthContext.Provider>
   );

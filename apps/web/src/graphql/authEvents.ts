@@ -7,3 +7,13 @@ export function registerForceLogout(cb: () => void) {
 export function triggerForceLogout() {
   forceLogoutCallback?.();
 }
+
+let unverifiedPromptCallback: (() => void) | null = null;
+
+export function registerUnverifiedPrompt(cb: () => void) {
+  unverifiedPromptCallback = cb;
+}
+
+export function triggerUnverifiedPrompt() {
+  unverifiedPromptCallback?.();
+}

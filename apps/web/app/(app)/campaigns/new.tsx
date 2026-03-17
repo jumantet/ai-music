@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Modal,
+  TouchableWithoutFeedback,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useLazyQuery } from '@apollo/client';
@@ -18,6 +21,8 @@ import {
   GENERATE_ADS_MUTATION,
   GET_UPLOAD_URL_MUTATION,
 } from '../../../src/graphql/mutations';
+import { useMutation as useResendMutation } from '@apollo/client';
+import { RESEND_VERIFICATION_MUTATION } from '../../../src/graphql/mutations';
 import { SUGGEST_HOOKS_QUERY, SEARCH_VIDEOS_FOR_MOOD_QUERY, ME_QUERY } from '../../../src/graphql/queries';
 import { Button, Card, Input, WaveformHookPicker } from '../../../src/components/ui';
 import { useTheme } from '../../../src/hooks/useTheme';
@@ -44,7 +49,7 @@ const GENERATE_STEPS = [
   'generateStep4',
 ];
 
-const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
+const makeStyles = (colors: ColorPalette, isMobile: boolean, thumbWidth: number) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bgCard },
     container: {
@@ -199,6 +204,9 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
       flexWrap: 'wrap',
       gap: spacing.sm,
     },
+    moodGridMobile: {
+      gap: spacing.sm,
+    },
     moodChip: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -242,8 +250,8 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
     // Video grid
     videoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
     videoThumb: {
-      width: isMobile ? '47%' : '23%',
-      aspectRatio: 9 / 16,
+      width: thumbWidth,
+      height: Math.round(thumbWidth * (16 / 9)),
       borderRadius: radius.md,
       backgroundColor: colors.bgElevated,
       overflow: 'hidden',
@@ -351,11 +359,15 @@ function energyLabel(energy: string, t: (k: string) => string): string {
   return t('campaigns.new.hookEnergyBuild');
 }
 
+const COLS_DESKTOP = 4;
+const COLS_MOBILE = 2;
+
 export default function NewCampaignScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const isMobile = useIsMobile();
-  const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
+
+  const styles = useMemo(() => makeStyles(colors, isMobile, 0), [colors, isMobile]);
 
   const [step, setStep] = useState<Step>(1);
 
@@ -379,14 +391,49 @@ export default function NewCampaignScreen() {
   const [customVideoS3Key, setCustomVideoS3Key] = useState('');
   const [customVideoUploaded, setCustomVideoUploaded] = useState(false);
   const [videoUploading, setVideoUploading] = useState(false);
+  const [previewVideo, setPreviewVideo] = useState<PexelsVideo | null>(null);
 
   // Step 4
   const [generateProgress, setGenerateProgress] = useState(0);
   const [generatedAds, setGeneratedAds] = useState<Array<{ id: string; videoUrl?: string; visualStyle: string; textOverlay?: string }>>([]);
 
   const [error, setError] = useState<string | null>(null);
+  const [showVerifModal, setShowVerifModal] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
+  const [resendError, setResendError] = useState(false);
+
+  // Step 1 loading overlay
+  const [uploadOverlay, setUploadOverlay] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStepIdx, setUploadStepIdx] = useState(0);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function clearProgressInterval() {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+  }
+
+  function animateProgressTo(target: number, durationMs: number) {
+    clearProgressInterval();
+    const steps = 30;
+    const interval = durationMs / steps;
+    let count = 0;
+    progressIntervalRef.current = setInterval(() => {
+      count++;
+      setUploadProgress((prev) => {
+        const next = prev + (target - prev) * (count / steps);
+        return count >= steps ? target : next;
+      });
+      if (count >= steps) clearProgressInterval();
+    }, interval);
+  }
+
+  useEffect(() => () => clearProgressInterval(), []);
 
   const [createCampaign, { loading: creating }] = useMutation(CREATE_CAMPAIGN_MUTATION);
+  const [resendVerification, { loading: resending }] = useResendMutation(RESEND_VERIFICATION_MUTATION);
   const [updateCampaign] = useMutation(UPDATE_CAMPAIGN_MUTATION);
   const [generateAds, { loading: generating }] = useMutation(GENERATE_ADS_MUTATION);
   const [getUploadUrl] = useMutation(GET_UPLOAD_URL_MUTATION);
@@ -397,8 +444,64 @@ export default function NewCampaignScreen() {
     },
   });
 
+  const [videoPage, setVideoPage] = useState(1);
   const [loadVideos, { loading: videosLoading, data: videosData }] = useLazyQuery(SEARCH_VIDEOS_FOR_MOOD_QUERY);
-  const videos: PexelsVideo[] = videosData?.searchVideosForMood ?? [];
+  const videosPage = videosData?.searchVideosForMood;
+  const videos: PexelsVideo[] = videosPage?.videos ?? [];
+  const videoTotalResults: number = videosPage?.totalResults ?? 0;
+  const videoPerPage: number = videosPage?.perPage ?? 8;
+  const totalVideoPages = Math.ceil(videoTotalResults / videoPerPage);
+
+  const videoGrid = useMemo(() => {
+    const cols = isMobile ? COLS_MOBILE : COLS_DESKTOP;
+    const items = videos.slice(0, 8);
+    const rows: PexelsVideo[][] = [];
+    for (let i = 0; i < items.length; i += cols) rows.push(items.slice(i, i + cols));
+    return (
+      <View style={{ gap: spacing.sm }}>
+        {rows.map((row, rowIdx) => (
+          <View key={rowIdx} style={{ flexDirection: 'row', gap: spacing.sm }}>
+            {row.map((v) => {
+              const isSelected = selectedVideoUrls.includes(v.url);
+              return (
+                <TouchableOpacity
+                  key={v.id}
+                  style={{ flex: 1, aspectRatio: 9 / 16 }}
+                  onPress={() => setPreviewVideo(v)}
+                  activeOpacity={0.85}
+                >
+                  <View style={[
+                    { flex: 1, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
+                    isSelected ? styles.videoThumbSelected : styles.videoThumbIdle,
+                  ]}>
+                    <Image
+                      source={{ uri: v.thumbnailUrl }}
+                      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                      resizeMode="cover"
+                    />
+                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: isSelected ? 'rgba(79,126,255,0.4)' : 'rgba(0,0,0,0.3)' }} />
+                    {isSelected ? (
+                      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="checkmark" size={18} color={colors.white} />
+                      </View>
+                    ) : (
+                      <Ionicons name="play-circle-outline" size={32} color="rgba(255,255,255,0.9)" />
+                    )}
+                    <Text style={[styles.videoCredit, { color: 'rgba(255,255,255,0.75)' }]} numberOfLines={1}>
+                      {v.photographer}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            {Array(cols - row.length).fill(null).map((_, i) => (
+              <View key={`empty-${i}`} style={{ flex: 1 }} />
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  }, [videos, isMobile, selectedVideoUrls, colors, styles]);
 
   const STEP_LABELS = [
     t('campaigns.new.step1'),
@@ -481,18 +584,46 @@ export default function NewCampaignScreen() {
       return;
     }
     setError(null);
+    setUploadOverlay(true);
+    setUploadProgress(0);
+    setUploadStepIdx(0);
+    animateProgressTo(28, 600);
+
     try {
       const { data } = await createCampaign({ variables: { trackTitle, artistName } });
       const id = data.createCampaign.id;
       setCampaignId(id);
+
       if (pendingTrackFile) {
+        setUploadStepIdx(1);
+        animateProgressTo(72, pendingTrackFile.size > 5_000_000 ? 3000 : 1500);
         await uploadPendingTrack(id, pendingTrackFile);
       }
-      // Start loading hook suggestions in background while user picks mood/video
+
+      setUploadStepIdx(2);
+      animateProgressTo(92, 800);
       loadHooks({ variables: { campaignId: id } });
+
+      await new Promise((r) => setTimeout(r, 900));
+      setUploadStepIdx(3);
+      animateProgressTo(100, 400);
+
+      await new Promise((r) => setTimeout(r, 500));
+      setUploadOverlay(false);
+      clearProgressInterval();
       setStep(2);
-    } catch {
-      setError('Failed to create campaign. Please try again.');
+    } catch (err: unknown) {
+      setUploadOverlay(false);
+      clearProgressInterval();
+      const gqlErrors: any[] = (err as any)?.graphQLErrors ?? [];
+      const isUnverified =
+        gqlErrors.some((e: any) => e?.extensions?.code === 'EMAIL_NOT_VERIFIED') ||
+        (err instanceof Error && err.message.includes('not verified'));
+      if (isUnverified) {
+        setShowVerifModal(true);
+      } else {
+        setError(t('campaigns.new.errorCreateFallback'));
+      }
     }
   }
 
@@ -547,7 +678,29 @@ export default function NewCampaignScreen() {
 
   function handleMoodSelect(mood: string) {
     setSelectedMood(mood);
-    loadVideos({ variables: { mood } });
+    setVideoPage(1);
+    loadVideos({ variables: { mood, page: 1 } });
+  }
+
+  function handleVideoPageChange(newPage: number) {
+    setVideoPage(newPage);
+    loadVideos({ variables: { mood: selectedMood, page: newPage } });
+  }
+
+  async function handleResendVerification() {
+    setResendError(false);
+    try {
+      await resendVerification();
+      setResendSent(true);
+    } catch {
+      setResendError(true);
+    }
+  }
+
+  function handleCloseVerifModal() {
+    setShowVerifModal(false);
+    setResendSent(false);
+    setResendError(false);
   }
 
   function handleFinish() {
@@ -658,25 +811,51 @@ export default function NewCampaignScreen() {
             <Text style={styles.stepTitle}>{t('campaigns.new.moodTitle')}</Text>
             <Text style={styles.stepSubtitle}>{t('campaigns.new.moodSubtitle')}</Text>
 
-            <View style={styles.moodGrid}>
-              {MOODS.map(({ key, icon }) => {
-                const isSelected = selectedMood === key;
-                const label = t(`campaigns.new.mood${key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')}`);
-                return (
-                  <TouchableOpacity
-                    key={key}
-                    style={[styles.moodChip, isSelected ? styles.moodChipSelected : styles.moodChipIdle]}
-                    onPress={() => handleMoodSelect(key)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name={icon} size={16} color={isSelected ? colors.primary : colors.textSecondary} />
-                    <Text style={[styles.moodChipLabel, isSelected ? styles.moodChipLabelSelected : styles.moodChipLabelIdle]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            {isMobile ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.moodGridMobile}
+              >
+                {MOODS.map(({ key, icon }) => {
+                  const isSelected = selectedMood === key;
+                  const label = t(`campaigns.new.mood${key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')}`);
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[styles.moodChip, isSelected ? styles.moodChipSelected : styles.moodChipIdle]}
+                      onPress={() => handleMoodSelect(key)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name={icon} size={16} color={isSelected ? colors.primary : colors.textSecondary} />
+                      <Text style={[styles.moodChipLabel, isSelected ? styles.moodChipLabelSelected : styles.moodChipLabelIdle]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <View style={styles.moodGrid}>
+                {MOODS.map(({ key, icon }) => {
+                  const isSelected = selectedMood === key;
+                  const label = t(`campaigns.new.mood${key.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')}`);
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[styles.moodChip, isSelected ? styles.moodChipSelected : styles.moodChipIdle]}
+                      onPress={() => handleMoodSelect(key)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name={icon} size={16} color={isSelected ? colors.primary : colors.textSecondary} />
+                      <Text style={[styles.moodChipLabel, isSelected ? styles.moodChipLabelSelected : styles.moodChipLabelIdle]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
 
             {/* Video source tab switcher */}
             <View style={styles.videoTabRow}>
@@ -711,27 +890,61 @@ export default function NewCampaignScreen() {
                   </View>
                 ) : videos.length === 0 ? (
                   <Text style={styles.muted}>{t('campaigns.new.videosNone')}</Text>
-                ) : (
-                  <View style={styles.videoGrid}>
-                    {videos.slice(0, 8).map((v) => {
-                      const isSelected = selectedVideoUrls.includes(v.url);
+                ) : videoGrid}
+
+                {/* Pagination */}
+                {totalVideoPages > 1 && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.xs }}>
+                    <TouchableOpacity
+                      onPress={() => handleVideoPageChange(videoPage - 1)}
+                      disabled={videoPage <= 1 || videosLoading}
+                      style={{
+                        width: 34, height: 34, borderRadius: radius.md,
+                        backgroundColor: colors.bgElevated,
+                        borderWidth: 1, borderColor: colors.border,
+                        alignItems: 'center', justifyContent: 'center',
+                        opacity: videoPage <= 1 ? 0.4 : 1,
+                      }}
+                    >
+                      <Ionicons name="chevron-back" size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+
+                    {Array.from({ length: Math.min(totalVideoPages, 5) }, (_, i) => {
+                      const startPage = Math.max(1, Math.min(videoPage - 2, totalVideoPages - 4));
+                      const p = startPage + i;
+                      const isActive = p === videoPage;
                       return (
                         <TouchableOpacity
-                          key={v.id}
-                          onPress={() =>
-                            setSelectedVideoUrls((prev) =>
-                              isSelected ? prev.filter((u) => u !== v.url) : [...prev, v.url]
-                            )
-                          }
-                          activeOpacity={0.8}
+                          key={p}
+                          onPress={() => handleVideoPageChange(p)}
+                          disabled={videosLoading}
+                          style={{
+                            width: 34, height: 34, borderRadius: radius.md,
+                            backgroundColor: isActive ? colors.primary : colors.bgElevated,
+                            borderWidth: 1, borderColor: isActive ? colors.primary : colors.border,
+                            alignItems: 'center', justifyContent: 'center',
+                          }}
                         >
-                          <View style={[styles.videoThumb, isSelected ? styles.videoThumbSelected : styles.videoThumbIdle]}>
-                            <Ionicons name="play-circle-outline" size={28} color={isSelected ? colors.primary : colors.textMuted} />
-                            <Text style={styles.videoCredit} numberOfLines={1}>{v.photographer}</Text>
-                          </View>
+                          <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: isActive ? colors.white : colors.textSecondary }}>
+                            {p}
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
+
+                    <TouchableOpacity
+                      onPress={() => handleVideoPageChange(videoPage + 1)}
+                      disabled={videoPage >= totalVideoPages || videosLoading}
+                      style={{
+                        width: 34, height: 34, borderRadius: radius.md,
+                        backgroundColor: colors.bgElevated,
+                        borderWidth: 1, borderColor: colors.border,
+                        alignItems: 'center', justifyContent: 'center',
+                        opacity: videoPage >= totalVideoPages ? 0.4 : 1,
+                      }}
+                    >
+                      <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
                   </View>
                 )}
               </>
@@ -939,6 +1152,238 @@ export default function NewCampaignScreen() {
           </View>
         </Card>
       )}
+      {/* ── Video preview modal ── */}
+      <Modal visible={!!previewVideo} transparent animationType="fade" onRequestClose={() => setPreviewVideo(null)}>
+        <TouchableWithoutFeedback onPress={() => setPreviewVideo(null)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg }}>
+            <TouchableWithoutFeedback>
+              <View style={{
+                width: '100%',
+                maxWidth: 380,
+                backgroundColor: colors.bgCard,
+                borderRadius: radius.xl,
+                borderWidth: 1,
+                borderColor: colors.border,
+                overflow: 'hidden',
+              }}>
+                {/* Video player */}
+                <View style={{ width: '100%', aspectRatio: 9 / 16, backgroundColor: colors.black }}>
+                  {previewVideo && Platform.OS === 'web' && (
+                    // @ts-ignore – createElement renders a native <video> tag on React Native Web
+                    React.createElement('video', {
+                      src: previewVideo.previewUrl,
+                      autoPlay: true,
+                      controls: true,
+                      loop: true,
+                      playsInline: true,
+                      style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
+                    })
+                  )}
+                </View>
+
+                {/* Footer */}
+                <View style={{ padding: spacing.md, gap: spacing.sm }}>
+                  <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textPrimary }} numberOfLines={1}>
+                    {previewVideo?.photographer}
+                  </Text>
+
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <TouchableOpacity
+                      style={{ flex: 1, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}
+                      onPress={() => setPreviewVideo(null)}
+                    >
+                      <Text style={{ fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textSecondary }}>{t('common.cancel')}</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{
+                        flex: 2,
+                        paddingVertical: spacing.sm,
+                        borderRadius: radius.md,
+                        alignItems: 'center',
+                        flexDirection: 'row',
+                        justifyContent: 'center',
+                        gap: spacing.xs,
+                        backgroundColor: previewVideo && selectedVideoUrls.includes(previewVideo.url)
+                          ? colors.bgElevated
+                          : colors.primary,
+                        borderWidth: previewVideo && selectedVideoUrls.includes(previewVideo.url) ? 1 : 0,
+                        borderColor: colors.border,
+                      }}
+                      onPress={() => {
+                        if (!previewVideo) return;
+                        setSelectedVideoUrls((prev) =>
+                          prev.includes(previewVideo.url)
+                            ? prev.filter((u) => u !== previewVideo.url)
+                            : [...prev, previewVideo.url]
+                        );
+                        setPreviewVideo(null);
+                      }}
+                    >
+                      <Ionicons
+                        name={previewVideo && selectedVideoUrls.includes(previewVideo.url) ? 'close-circle-outline' : 'checkmark-circle-outline'}
+                        size={16}
+                        color={previewVideo && selectedVideoUrls.includes(previewVideo.url) ? colors.textSecondary : colors.white}
+                      />
+                      <Text style={{
+                        fontFamily: fonts.semiBold,
+                        fontSize: fontSize.sm,
+                        color: previewVideo && selectedVideoUrls.includes(previewVideo.url) ? colors.textSecondary : colors.white,
+                      }}>
+                        {previewVideo && selectedVideoUrls.includes(previewVideo.url)
+                          ? t('campaigns.new.videoDeselect')
+                          : t('campaigns.new.videoSelect')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* ── Step 1 upload overlay ── */}
+      <Modal visible={uploadOverlay} transparent animationType="fade">
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(8,8,14,0.92)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: spacing.xl,
+        }}>
+          <View style={{
+            width: '100%',
+            maxWidth: 420,
+            backgroundColor: colors.bgCard,
+            borderRadius: radius.xl,
+            borderWidth: 1,
+            borderColor: colors.border,
+            padding: spacing.xl,
+            gap: spacing.lg,
+          }}>
+            {/* Icon + title */}
+            <View style={{ alignItems: 'center', gap: spacing.sm }}>
+              <View style={{
+                width: 56,
+                height: 56,
+                borderRadius: radius.full,
+                backgroundColor: colors.primaryBg,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Ionicons
+                  name={uploadStepIdx === 3 ? 'checkmark' : uploadStepIdx === 1 ? 'cloud-upload-outline' : uploadStepIdx === 2 ? 'musical-notes-outline' : 'add-circle-outline'}
+                  size={26}
+                  color={uploadStepIdx === 3 ? colors.success : colors.primary}
+                />
+              </View>
+              <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary, textAlign: 'center' }}>
+                {uploadStepIdx === 0 && t('campaigns.new.uploadOverlayStep0')}
+                {uploadStepIdx === 1 && t('campaigns.new.uploadOverlayStep1')}
+                {uploadStepIdx === 2 && t('campaigns.new.uploadOverlayStep2')}
+                {uploadStepIdx === 3 && t('campaigns.new.uploadOverlayStep3')}
+              </Text>
+              <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'center' }}>
+                {uploadStepIdx === 0 && t('campaigns.new.uploadOverlayStep0Sub')}
+                {uploadStepIdx === 1 && (pendingTrackFile ? pendingTrackFile.name : '')}
+                {uploadStepIdx === 2 && t('campaigns.new.uploadOverlayStep2Sub')}
+                {uploadStepIdx === 3 && t('campaigns.new.uploadOverlayStep3Sub')}
+              </Text>
+            </View>
+
+            {/* Progress bar */}
+            <View style={{ gap: spacing.xs }}>
+              <View style={{
+                height: 6,
+                backgroundColor: colors.bgElevated,
+                borderRadius: radius.full,
+                overflow: 'hidden',
+              }}>
+                <View style={{
+                  height: '100%',
+                  width: `${uploadProgress}%` as any,
+                  backgroundColor: uploadStepIdx === 3 ? colors.success : colors.primary,
+                  borderRadius: radius.full,
+                }} />
+              </View>
+              <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' }}>
+                {Math.round(uploadProgress)}%
+              </Text>
+            </View>
+
+            {/* Step dots */}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: spacing.sm }}>
+              {[0, 1, 2, 3].map((i) => (
+                <View key={i} style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: i <= uploadStepIdx
+                    ? (uploadStepIdx === 3 ? colors.success : colors.primary)
+                    : colors.bgElevated,
+                }} />
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Verification required modal ── */}
+      <Modal visible={showVerifModal} transparent animationType="fade" onRequestClose={handleCloseVerifModal}>
+        <TouchableWithoutFeedback onPress={handleCloseVerifModal}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl }}>
+            <TouchableWithoutFeedback>
+              <View style={{
+                backgroundColor: colors.bgCard,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: colors.border,
+                padding: spacing.xl,
+                width: '100%',
+                maxWidth: 400,
+                gap: spacing.md,
+              }}>
+                <Text style={{ fontSize: 32, textAlign: 'center' }}>✉️</Text>
+                <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary, textAlign: 'center' }}>
+                  {t('auth.verificationModal.title')}
+                </Text>
+                <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 }}>
+                  {t('auth.verificationModal.body')}
+                </Text>
+
+                {resendSent && (
+                  <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.success, textAlign: 'center' }}>
+                    {t('auth.verificationModal.sent')}
+                  </Text>
+                )}
+                {resendError && (
+                  <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.error, textAlign: 'center' }}>
+                    {t('auth.verificationModal.error')}
+                  </Text>
+                )}
+
+                {!resendSent && (
+                  <TouchableOpacity
+                    onPress={handleResendVerification}
+                    disabled={resending}
+                    style={{ backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs }}
+                  >
+                    {resending
+                      ? <ActivityIndicator size="small" color={colors.white} />
+                      : <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.white }}>{t('auth.verificationModal.resend')}</Text>
+                    }
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity onPress={handleCloseVerifModal} style={{ alignItems: 'center', paddingVertical: spacing.xs }}>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted }}>{t('common.cancel')}</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </ScrollView>
   );
 }

@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { GraphQLError } from 'graphql';
 import { prisma } from '../services/prisma';
 import type { User } from '@prisma/client';
 
@@ -39,6 +40,8 @@ export function requireAuth(user: User | undefined): asserts user is User {
 
 export function requireVerified(user: User): void {
   if (!user.emailVerified) {
-    throw new Error('Please verify your email address before continuing. Check your inbox or resend the verification email from Settings.');
+    throw new GraphQLError('Email address not verified.', {
+      extensions: { code: 'EMAIL_NOT_VERIFIED' },
+    });
   }
 }

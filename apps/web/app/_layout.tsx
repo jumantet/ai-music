@@ -14,6 +14,7 @@ import {
 import { apolloClient } from '../src/graphql/client';
 import { AuthProvider, useAuth } from '../src/hooks/useAuth';
 import { ThemeProvider, useTheme } from '../src/hooks/useTheme';
+import { VerificationRequiredModal } from '../src/components/ui/VerificationRequiredModal';
 
 function RootGuard() {
   const { user, isLoading } = useAuth();
@@ -42,7 +43,12 @@ function RootGuard() {
     );
   }
 
-  return <Slot />;
+  return (
+    <>
+      <Slot />
+      <VerificationRequiredModal />
+    </>
+  );
 }
 
 function AppProviders() {

@@ -56,14 +56,13 @@ export const campaignResolvers = {
 
     searchVideosForMood: async (
       _: unknown,
-      { mood }: { mood: string },
+      { mood, page = 1 }: { mood: string; page?: number },
       ctx: AuthContext
     ) => {
       requireAuth(ctx.user);
-      requireVerified(ctx.user);
 
       const keywords = MOOD_KEYWORDS[mood] ?? ['music visual aesthetic', 'abstract motion', 'cinematic blur'];
-      return searchVideos(keywords, 'portrait', 12);
+      return searchVideos(keywords, 'portrait', 8, page);
     },
   },
 
@@ -158,8 +157,8 @@ export const campaignResolvers = {
       } else {
         const keywords = MOOD_KEYWORDS[mood] ?? ['music visual aesthetic'];
         try {
-          const videos = await searchVideos(keywords, 'portrait', 8);
-          videoUrls = videos.map((v) => v.previewUrl);
+          const result = await searchVideos(keywords, 'portrait', 8, 1);
+          videoUrls = result.videos.map((v) => v.previewUrl);
         } catch {
           // Continue without Pexels videos
         }

@@ -47,19 +47,31 @@ function getBestVideoFile(files: PexelsVideoFile[]): PexelsVideoFile | undefined
   return files.find((f) => f.file_type === 'video/mp4');
 }
 
+export interface PexelsVideosPage {
+  videos: PexelsVideo[];
+  totalResults: number;
+  page: number;
+  perPage: number;
+}
+
 export async function searchVideos(
   keywords: string[],
   orientation: 'portrait' | 'landscape' | 'square' = 'portrait',
-  perPage = 15
-): Promise<PexelsVideo[]> {
+  perPage = 8,
+  page = 1
+): Promise<PexelsVideosPage> {
   const apiKey = process.env.PEXELS_API_KEY;
-  if (!apiKey) throw new Error('PEXELS_API_KEY is not set');
+  if (!apiKey) {
+    console.warn('[Pexels] PEXELS_API_KEY is not set — returning empty results');
+    return { videos: [], totalResults: 0, page, perPage };
+  }
 
   const query = keywords.slice(0, 3).join(' ');
   const url = new URL('https://api.pexels.com/videos/search');
   url.searchParams.set('query', query);
   url.searchParams.set('orientation', orientation);
   url.searchParams.set('per_page', String(perPage));
+  url.searchParams.set('page', String(page));
   url.searchParams.set('size', 'medium');
 
   const response = await fetch(url.toString(), {
@@ -72,18 +84,23 @@ export async function searchVideos(
 
   const data = (await response.json()) as PexelsVideosResponse;
 
-  return data.videos.map((video) => {
-    const bestFile = getBestVideoFile(video.video_files);
-    return {
-      id: String(video.id),
-      url: video.url,
-      thumbnailUrl: video.image,
-      previewUrl: bestFile?.link ?? video.url,
-      duration: video.duration,
-      width: video.width,
-      height: video.height,
-      photographer: video.user.name,
-      photographerUrl: video.user.url,
-    };
-  });
+  return {
+    videos: data.videos.map((video) => {
+      const bestFile = getBestVideoFile(video.video_files);
+      return {
+        id: String(video.id),
+        url: video.url,
+        thumbnailUrl: video.image,
+        previewUrl: bestFile?.link ?? video.url,
+        duration: video.duration,
+        width: video.width,
+        height: video.height,
+        photographer: video.user.name,
+        photographerUrl: video.user.url,
+      };
+    }),
+    totalResults: data.total_results,
+    page,
+    perPage,
+  };
 }

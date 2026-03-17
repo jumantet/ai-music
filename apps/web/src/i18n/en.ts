@@ -57,6 +57,13 @@ const en = {
       sent: 'Verification email sent. Check your inbox.',
       resend: 'Resend email',
     },
+    verificationModal: {
+      title: 'Verify your email first',
+      body: 'This action requires a verified email address. Check your inbox or resend the verification email.',
+      resend: 'Resend verification email',
+      sent: 'Email sent! Check your inbox.',
+      error: 'Failed to send email. Please try again.',
+    },
   },
 
   sidebar: {
@@ -128,6 +135,15 @@ const en = {
       continueBtn: 'Continue →',
       errorRequired: 'Title and artist name are required',
       errorTrackRequired: 'Please upload a track',
+      errorCreateFallback: 'Failed to create campaign. Please try again.',
+
+      uploadOverlayStep0: 'Creating campaign…',
+      uploadOverlayStep0Sub: 'Setting up your project',
+      uploadOverlayStep1: 'Uploading track…',
+      uploadOverlayStep2: 'Detecting hooks…',
+      uploadOverlayStep2Sub: 'AI is finding the catchiest moments in your track',
+      uploadOverlayStep3: 'All done!',
+      uploadOverlayStep3Sub: 'Moving to the next step…',
 
       // Step 2 - Hook Finder
       hookTitle: 'Choose your hook',
@@ -156,6 +172,8 @@ const en = {
       videosTitle: 'Matching visuals',
       videosLoading: 'Finding matching videos...',
       videosNone: 'No videos found for this mood.',
+      videoSelect: 'Use this video',
+      videoDeselect: 'Remove selection',
       videoSourceStock: 'Stock videos',
       videoSourceOwn: 'Your video',
       uploadVideoLabel: 'Upload your video',
