@@ -496,7 +496,12 @@ export default function NewCampaignScreen() {
 
   const [loadHooks, { loading: hooksLoading }] = useLazyQuery(SUGGEST_HOOKS_QUERY, {
     onCompleted: (data) => {
-      setHookSuggestions(data?.suggestHooks ?? []);
+      const hooks = data?.suggestHooks ?? [];
+      setHookSuggestions(hooks);
+      // Auto-select the first suggestion so the user can continue without interaction
+      if (hooks.length > 0) {
+        setSelectedHook(hooks[0]);
+      }
     },
   });
 
@@ -1213,13 +1218,16 @@ export default function NewCampaignScreen() {
                   ? hookSuggestions
                   : [
                       { start: 25, end: 40, label: 'chorus', energy: 'chorus' as const },
-                      { start: 42, end: 57, label: 'high energy', energy: 'high' as const },
-                      { start: 58, end: 73, label: 'melodic build', energy: 'build' as const },
+                      { start: 60, end: 75, label: 'drop', energy: 'high' as const },
                     ]
               }
               selected={selectedHook}
               onSelect={setSelectedHook}
               loading={hooksLoading}
+              previewVideoUrl={
+                customVideoLocalUrl ??
+                (videos.length > 0 ? videos[0].previewUrl : undefined)
+              }
             />
 
             <View style={styles.actions}>

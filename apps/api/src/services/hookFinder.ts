@@ -139,22 +139,21 @@ export async function suggestHooks(
       {
         role: 'system',
         content: `You are a music production expert specializing in creating short-form video ads for social media.
-Your task is to suggest the 3 best 15-second hook segments from a track that would work best as a music ad on Instagram/TikTok.
+Your task is to suggest exactly 2 (no more, no less) 15-second hook segments from a track that would work best as a music ad on Instagram/TikTok.
 Apply standard song structure knowledge: intros are rarely catchy in ads, choruses and drops are best, melodic builds create anticipation.
 Typical track structure: intro (0-15s), verse (15-45s), pre-chorus/build (45-60s), chorus/drop (60-90s), second verse (90-120s), second chorus (120-150s), bridge (150-165s), outro chorus (165-195s).
-Return ONLY valid JSON.`,
+Return ONLY valid JSON with exactly 2 hooks.`,
       },
       {
         role: 'user',
         content: `${trackContext}
 
-Suggest 3 hook segments (each 15 seconds long) that would perform best as music ads.
+Suggest 2 hook segments (each 15 seconds long) that would perform best as music ads.
 Focus on moments that would hook a listener within the first 2 seconds.
 
 Return JSON:
 {
   "hooks": [
-    { "start": <seconds>, "end": <seconds>, "label": "<short description>", "energy": "high" | "chorus" | "build" },
     { "start": <seconds>, "end": <seconds>, "label": "<short description>", "energy": "high" | "chorus" | "build" },
     { "start": <seconds>, "end": <seconds>, "label": "<short description>", "energy": "high" | "chorus" | "build" }
   ]
@@ -174,7 +173,7 @@ Return JSON:
     const parsed = JSON.parse(content) as { hooks: HookSuggestion[] };
     const hooks = parsed.hooks ?? [];
     if (hooks.length === 0) return getDefaultHooks();
-    return hooks.slice(0, 3).map((h) => ({
+    return hooks.slice(0, 2).map((h) => ({
       start: Math.max(0, Math.round(h.start)),
       end: Math.max(15, Math.round(h.end)),
       label: h.label ?? '',
@@ -188,7 +187,6 @@ Return JSON:
 function getDefaultHooks(): HookSuggestion[] {
   return [
     { start: 60, end: 75, label: 'Chorus', energy: 'chorus' },
-    { start: 42, end: 57, label: 'Pre-chorus build', energy: 'build' },
-    { start: 90, end: 105, label: 'Second chorus drop', energy: 'high' },
+    { start: 90, end: 105, label: 'Drop', energy: 'high' },
   ];
 }
