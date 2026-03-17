@@ -660,33 +660,6 @@ export function WaveformHookPicker({
         </View>
       </View>
 
-      {/* Below phone: selected hook info */}
-      {selected ? (
-        <View style={{
-          flexDirection: "row", alignItems: "center", gap: spacing.sm,
-          backgroundColor: colors.bgElevated,
-          borderRadius: radius.full,
-          paddingHorizontal: spacing.md, paddingVertical: 6,
-          borderWidth: 1, borderColor: colors.border,
-        }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,100,30,1)" }} />
-          <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textPrimary }}>
-            {fmt(selected.start)} — {fmt(selected.end)}
-          </Text>
-          <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted }}>
-            · {energyLabel(selected.energy)} · {HOOK_DURATION}s
-          </Text>
-          {audioLoaded && (
-            <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted }}>
-              · glisse pour repositionner
-            </Text>
-          )}
-        </View>
-      ) : audioLoaded ? (
-        <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted, textAlign: "center" }}>
-          Glisse sur la waveform pour choisir ton moment
-        </Text>
-      ) : null}
     </View>
   );
 }
