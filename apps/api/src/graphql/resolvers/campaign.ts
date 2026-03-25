@@ -145,7 +145,34 @@ export const campaignResolvers = {
       return true;
     },
 
-    generateAds: async (_: unknown, { campaignId }: { campaignId: string }, ctx: AuthContext) => {
+    generateAds: async (
+      _: unknown,
+      {
+        campaignId,
+        selectedVideoUrl,
+        editorSettings,
+      }: {
+        campaignId: string;
+        selectedVideoUrl?: string | null;
+        editorSettings?: {
+          filterPreset?: string;
+          brightness?: number;
+          contrast?: number;
+          saturation?: number;
+          grain?: number;
+          text?: string;
+          fontFamily?: string;
+          fontSize?: number;
+          fontColor?: string;
+          textBgColor?: string;
+          textBgOpacity?: number;
+          textPosition?: string;
+          fadeIn?: number;
+          fadeOut?: number;
+        } | null;
+      },
+      ctx: AuthContext
+    ) => {
       requireAuth(ctx.user);
       requireVerified(ctx.user);
 
@@ -164,10 +191,11 @@ export const campaignResolvers = {
       const hookStart = campaign.hookStart ?? 60;
       const hookEnd = campaign.hookEnd ?? 75;
 
-      // If the user uploaded their own video, use it for all 4 ads.
-      // Otherwise fall back to Pexels stock clips.
+      // Priority: 1) explicit selectedVideoUrl from editor, 2) custom upload, 3) Pexels search
       let videoUrls: string[] = [];
-      if (campaign.customVideoUrl) {
+      if (selectedVideoUrl) {
+        videoUrls = [selectedVideoUrl];
+      } else if (campaign.customVideoUrl) {
         videoUrls = [campaign.customVideoUrl];
       } else {
         const keywords = MOOD_KEYWORDS[mood] ?? ['music visual aesthetic'];
@@ -192,21 +220,15 @@ export const campaignResolvers = {
           customVideoS3Key: campaign.customVideoS3Key ?? null,
           artistName: campaign.artistName,
           trackTitle: campaign.trackTitle,
+          editorSettings: editorSettings ?? undefined,
         });
       } catch {
-        // Fallback: create stub ads without video rendering
-        const FALLBACK_STYLES = [
-          { style: 'Night Drive', text: 'Out now' },
-          { style: 'Abstract Motion', text: 'Listen now' },
-          { style: 'Vintage Footage', text: 'Stream now' },
-          { style: 'City Lights', text: 'New track' },
-        ];
-        variants = FALLBACK_STYLES.map((s) => ({
-          visualStyle: s.style,
-          textOverlay: s.text,
+        variants = [{
+          visualStyle: mood,
+          textOverlay: editorSettings?.text || 'Out now',
           videoS3Key: '',
           videoUrl: '',
-        }));
+        }];
       }
 
       // Persist generated ads

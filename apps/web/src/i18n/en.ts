@@ -118,8 +118,9 @@ const en = {
       step1: 'Upload',
       step2: 'Hook',
       step3: 'Mood',
-      step4: 'Generate',
-      step5: 'Export',
+      step4: 'Editor',
+      step5: 'Generate',
+      step6: 'Export',
 
       // Step 1 - Upload
       uploadTitle: 'Upload your track',
@@ -188,13 +189,14 @@ const en = {
       uploadVideoSubtitle: "We'll auto-crop it to 9:16 and sync your hook.",
 
       // Step 4 - Generate
-      generateTitle: 'Generating your ads',
-      generateSubtitle: "Hold tight — we're rendering {{count}} ad variations for you.",
+      generateTitle: 'Generating your ad',
+      generateSubtitle: "Hold tight — we're rendering your custom ad.",
       generateStep1: 'Analyzing audio...',
       generateStep2: 'Matching visuals...',
       generateStep3: 'Rendering ads...',
       generateStep4: 'Adding text overlays...',
       generateDone: 'Done! Your ads are ready.',
+      generateFinalizing: 'Finalizing your ads…',
       adVariant: 'Ad {{n}}',
 
       // Step 5 - Export

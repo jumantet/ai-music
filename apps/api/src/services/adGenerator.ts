@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { getSignedDownloadUrl, uploadBuffer, getPublicUrl } from './storage';
+import { getSignedDownloadUrl, uploadBuffer } from './storage';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,62 +14,70 @@ export interface AdVariant {
   videoUrl: string;
 }
 
-const MOOD_STYLES: Record<string, Array<{ style: string; text: string }>> = {
-  dreamy: [
-    { style: 'Dreamy Blur', text: 'Out now' },
-    { style: 'Pastel Haze', text: 'Listen now' },
-    { style: 'Soft Focus', text: 'Stream now' },
-    { style: 'Golden Hour', text: 'New track' },
-  ],
-  night_drive: [
-    { style: 'Night Drive', text: 'Out now' },
-    { style: 'Neon City', text: 'Listen now' },
-    { style: 'Dark Highway', text: 'Stream now' },
-    { style: 'City Lights', text: 'New track' },
-  ],
-  indie: [
-    { style: 'Indie Aesthetic', text: 'Out now' },
-    { style: 'Grain Film', text: 'Listen now' },
-    { style: 'Lo-Fi Warm', text: 'Stream now' },
-    { style: 'Muted Tones', text: 'New track' },
-  ],
-  psychedelic: [
-    { style: 'Psychedelic Loop', text: 'Out now' },
-    { style: 'Color Prism', text: 'Listen now' },
-    { style: 'Abstract Motion', text: 'Stream now' },
-    { style: 'Kaleidoscope', text: 'New track' },
-  ],
-  vintage: [
-    { style: 'Vintage Footage', text: 'Out now' },
-    { style: 'Super 8 Film', text: 'Listen now' },
-    { style: 'Sepia Tone', text: 'Stream now' },
-    { style: 'Analog Grain', text: 'New track' },
-  ],
-  urban: [
-    { style: 'Urban Street', text: 'Out now' },
-    { style: 'City Rooftop', text: 'Listen now' },
-    { style: 'Concrete Jungle', text: 'Stream now' },
-    { style: 'Metro Motion', text: 'New track' },
-  ],
+export interface EditorSettings {
+  filterPreset?: string;
+  brightness?: number;   // 50–150, default 100
+  contrast?: number;     // 50–150, default 100
+  saturation?: number;   // 0–200, default 100
+  grain?: number;        // 0–100, default 0
+  text?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontColor?: string;
+  textBgColor?: string;
+  textBgOpacity?: number;
+  textPosition?: string;
+  fadeIn?: number;
+  fadeOut?: number;
+}
+
+// ffmpeg filter chains per preset (before manual adjustments)
+const PRESET_FFMPEG: Record<string, string> = {
+  none:       '',
+  california: 'colorchannelmixer=rr=1.1:gg=1.0:bb=0.85',
+  tokyo:      'colorchannelmixer=rr=0.85:gg=0.9:bb=1.15,hue=h=200',
+  havana:     'colorchannelmixer=rr=1.15:gg=0.95:bb=0.8',
+  paris:      'eq=saturation=0.65:contrast=0.9,colorchannelmixer=rr=1.02:gg=1.0:bb=1.04',
+  berlin:     'eq=saturation=0.4:contrast=1.3,colorchannelmixer=rr=0.9:gg=1.0:bb=1.1',
+  lagos:      'eq=saturation=2.0',
+  seoul:      'eq=saturation=0.85:contrast=1.05',
+  midnight:   'eq=saturation=0.8,colorchannelmixer=rr=0.8:gg=0.85:bb=1.2',
+  desert:     'colorchannelmixer=rr=1.1:gg=1.0:bb=0.8',
+  cinema:     'eq=saturation=0:contrast=1.25',
+  polaroid:   'eq=saturation=0.75:contrast=0.92,colorchannelmixer=rr=1.0:gg=1.02:bb=0.95',
+  analog:     'colorchannelmixer=rr=1.05:gg=0.95:bb=0.9',
+  dream:      'colorchannelmixer=rr=0.9:gg=0.85:bb=1.15',
 };
 
-const DEFAULT_STYLES = [
-  { style: 'Night Drive', text: 'Out now' },
-  { style: 'Abstract Motion', text: 'Listen now' },
-  { style: 'Vintage Footage', text: 'Stream now' },
-  { style: 'City Lights', text: 'New track' },
-];
+const MOOD_LABEL: Record<string, string> = {
+  dreamy: 'Dreamy',
+  night_drive: 'Night Drive',
+  indie: 'Indie',
+  psychedelic: 'Psychedelic',
+  vintage: 'Vintage',
+  urban: 'Urban',
+};
+
+const PRESET_LABEL: Record<string, string> = {
+  none: 'Original',
+  california: 'California',
+  tokyo: 'Tokyo',
+  havana: 'Havana',
+  paris: 'Paris',
+  berlin: 'Berlin',
+  lagos: 'Lagos',
+  seoul: 'Seoul',
+  midnight: 'Midnight',
+  desert: 'Desert',
+  cinema: 'Cinéma',
+  polaroid: 'Polaroid',
+  analog: 'Analog',
+  dream: 'Dream',
+};
 
 /**
- * Generates 4 video ad variations for a campaign.
- *
- * Each ad is a 9:16 portrait MP4 (~15s) consisting of:
- *   - A looped video clip (from Pexels, already downloaded to a temp file)
- *   - The campaign hook trimmed from the track
- *   - A text overlay burned in via ffmpeg drawtext
- *
- * If ffmpeg is not available or any step fails, we gracefully return stub
- * metadata so the rest of the flow is not blocked (the videoUrl will be null).
+ * Generates a single video ad for a campaign, applying editor settings (filter,
+ * text overlay with custom font/color/position, and fade in/out transitions).
  */
 export async function generateAdVariants(params: {
   campaignId: string;
@@ -81,15 +89,26 @@ export async function generateAdVariants(params: {
   customVideoS3Key?: string | null;
   artistName: string;
   trackTitle: string;
+  editorSettings?: EditorSettings;
 }): Promise<AdVariant[]> {
-  const { campaignId, trackS3Key, hookStart, hookEnd, mood, videoUrls, customVideoS3Key, artistName, trackTitle } = params;
-  const styles = MOOD_STYLES[mood] ?? DEFAULT_STYLES;
-  const hookDuration = Math.min(hookEnd - hookStart, 15);
+  const {
+    campaignId,
+    trackS3Key,
+    hookStart,
+    hookEnd,
+    mood,
+    videoUrls,
+    customVideoS3Key,
+    artistName,
+    trackTitle,
+    editorSettings = {},
+  } = params;
 
+  const hookDuration = Math.min(hookEnd - hookStart, 15);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `ad-gen-${campaignId}-`));
 
   try {
-    // Download track hook audio if available
+    // Download audio
     let audioPath: string | null = null;
     if (trackS3Key) {
       try {
@@ -100,100 +119,184 @@ export async function generateAdVariants(params: {
           audioPath = path.join(tmpDir, 'track.mp3');
           fs.writeFileSync(audioPath, buf);
         }
-      } catch {
-        // Continue without audio
-      }
+      } catch { /* no audio */ }
     }
 
-    // If a custom video was uploaded, download it once and reuse across all 4 ads
-    let sharedVideoPath: string | null = null;
+    // Download video (custom upload takes priority)
+    let videoPath: string | null = null;
     if (customVideoS3Key) {
       try {
-        const customVideoSignedUrl = await getSignedDownloadUrl(customVideoS3Key, 600);
-        const res = await fetch(customVideoSignedUrl);
+        const signedUrl = await getSignedDownloadUrl(customVideoS3Key, 600);
+        const res = await fetch(signedUrl);
         if (res.ok) {
           const buf = Buffer.from(await res.arrayBuffer());
-          sharedVideoPath = path.join(tmpDir, 'custom_video.mp4');
-          fs.writeFileSync(sharedVideoPath, buf);
+          videoPath = path.join(tmpDir, 'video.mp4');
+          fs.writeFileSync(videoPath, buf);
         }
-      } catch {
-        // Non-fatal: fall through to Pexels URLs
-      }
+      } catch { /* fall through */ }
     }
 
-    const results: AdVariant[] = [];
-
-    for (let i = 0; i < 4; i++) {
-      const styleInfo = styles[i] ?? styles[0];
-      // Use the custom video for every variation, or rotate through Pexels clips
-      const pexelsUrl = sharedVideoPath ? null : (videoUrls[i % videoUrls.length] ?? null);
-
-      let outputKey: string | null = null;
-      let outputUrl: string | null = null;
-
-      if ((sharedVideoPath || pexelsUrl) && audioPath) {
-        try {
-          let videoPath: string | null = sharedVideoPath;
-
-          if (!videoPath && pexelsUrl) {
-            // Download Pexels clip
-            const videoRes = await fetch(pexelsUrl);
-            if (videoRes.ok) {
-              const videoBuf = Buffer.from(await videoRes.arrayBuffer());
-              videoPath = path.join(tmpDir, `clip_${i}.mp4`);
-              fs.writeFileSync(videoPath, videoBuf);
-            }
-          }
-
-          if (videoPath) {
-            const outputPath = path.join(tmpDir, `ad_${i}.mp4`);
-            const text = `${styleInfo.text}\\n${artistName} - ${trackTitle}`;
-
-            await runFfmpeg(videoPath, audioPath, outputPath, {
-              hookStart,
-              hookDuration,
-              text,
-            });
-
-            const outputBuf = fs.readFileSync(outputPath);
-            outputKey = `campaigns/${campaignId}/ad_${i}_${Date.now()}.mp4`;
-            outputUrl = await uploadBuffer(outputKey, outputBuf, 'video/mp4');
-          }
-        } catch {
-          // Ffmpeg step failed — fall through to stub
+    if (!videoPath && videoUrls[0]) {
+      try {
+        const res = await fetch(videoUrls[0]);
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          videoPath = path.join(tmpDir, 'video.mp4');
+          fs.writeFileSync(videoPath, buf);
         }
-      }
-
-      results.push({
-        visualStyle: styleInfo.style,
-        textOverlay: styleInfo.text,
-        videoS3Key: outputKey ?? '',
-        videoUrl: outputUrl ?? '',
-      });
+      } catch { /* fall through */ }
     }
 
-    return results;
+    let outputKey: string | null = null;
+    let outputUrl: string | null = null;
+
+    if (videoPath && audioPath) {
+      try {
+        const outputPath = path.join(tmpDir, 'ad.mp4');
+        await runFfmpeg(videoPath, audioPath, outputPath, {
+          hookStart,
+          hookDuration,
+          artistName,
+          trackTitle,
+          editorSettings,
+        });
+        const outputBuf = fs.readFileSync(outputPath);
+        outputKey = `campaigns/${campaignId}/ad_${Date.now()}.mp4`;
+        outputUrl = await uploadBuffer(outputKey, outputBuf, 'video/mp4');
+      } catch { /* ffmpeg failed */ }
+    }
+
+    const presetName = editorSettings.filterPreset
+      ? (PRESET_LABEL[editorSettings.filterPreset] ?? editorSettings.filterPreset)
+      : null;
+    const visualStyle = presetName && presetName !== 'Original'
+      ? presetName
+      : (MOOD_LABEL[mood] ?? mood);
+    const textOverlay = editorSettings.text || 'Out now';
+
+    return [{
+      visualStyle,
+      textOverlay,
+      videoS3Key: outputKey ?? '',
+      videoUrl: outputUrl ?? '',
+    }];
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+}
+
+function buildFfmpegFilterComplex(opts: {
+  hookDuration: number;
+  artistName: string;
+  trackTitle: string;
+  editorSettings: EditorSettings;
+}): string {
+  const { hookDuration, artistName, trackTitle, editorSettings } = opts;
+  const {
+    filterPreset = 'none',
+    brightness = 100,
+    contrast = 100,
+    saturation = 100,
+    grain = 0,
+    text = '',
+    fontFamily = 'sans',
+    fontSize = 42,
+    fontColor = '#FFFFFF',
+    textBgColor = '#000000',
+    textBgOpacity = 0.5,
+    textPosition = 'bottom',
+    fadeIn = 0.5,
+    fadeOut = 0.5,
+  } = editorSettings;
+
+  const filters: string[] = [];
+
+  // 1. Scale & crop to 9:16, loop to hookDuration
+  filters.push(
+    `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,loop=loop=-1:size=500,trim=duration=${hookDuration},setpts=PTS-STARTPTS[base]`
+  );
+
+  // 2. Preset color grading
+  const presetFilter = PRESET_FFMPEG[filterPreset] ?? '';
+
+  // 3. Manual eq adjustments (convert 50–150/0–200 range → ffmpeg values)
+  const eqBrightness = ((brightness - 100) / 100).toFixed(3);  // -0.5 to +0.5
+  const eqContrast   = (contrast / 100).toFixed(3);             // 0.5 to 1.5
+  const eqSaturation = (saturation / 100).toFixed(3);           // 0.0 to 2.0
+  const hasEq = brightness !== 100 || contrast !== 100 || saturation !== 100;
+  const eqFilter = hasEq
+    ? `eq=brightness=${eqBrightness}:contrast=${eqContrast}:saturation=${eqSaturation}`
+    : '';
+
+  const colorChain = [presetFilter, eqFilter].filter(Boolean).join(',');
+  if (colorChain) {
+    filters.push(`[base]${colorChain}[colored]`);
+  } else {
+    filters.push(`[base]null[colored]`);
+  }
+
+  // 4. Grain
+  if (grain > 0) {
+    const noiseStr = Math.round(grain * 0.4); // 0-40 noise strength
+    filters.push(`[colored]noise=alls=${noiseStr}:allf=t+u[grained]`);
+  } else {
+    filters.push(`[colored]null[grained]`);
+  }
+
+  // 5. FadeIn / FadeOut
+  const fadeFilters: string[] = [];
+  if (fadeIn > 0) fadeFilters.push(`fade=t=in:st=0:d=${fadeIn}`);
+  if (fadeOut > 0) fadeFilters.push(`fade=t=out:st=${Math.max(0, hookDuration - fadeOut)}:d=${fadeOut}`);
+  if (fadeFilters.length > 0) {
+    filters.push(`[grained]${fadeFilters.join(',')}[faded]`);
+  } else {
+    filters.push(`[grained]null[faded]`);
+  }
+
+  // 6. Text overlay
+  const displayText = text
+    ? `${escapeDrawtext(text)}\\n${escapeDrawtext(artistName)} - ${escapeDrawtext(trackTitle)}`
+    : `${escapeDrawtext(artistName)} - ${escapeDrawtext(trackTitle)}`;
+
+  const ffFontColor = hexToFfmpegColor(fontColor);
+  const ffBgColor = textBgColor === 'transparent' || !textBgColor
+    ? '00000000'
+    : `${hexToFfmpegColor(textBgColor)}@${textBgOpacity.toFixed(2)}`;
+
+  const yPos =
+    textPosition === 'top'    ? '80' :
+    textPosition === 'center' ? '(h-text_h)/2' :
+    'h-150';
+
+  const fontstyle = fontFamily === 'bold' ? 'Bold' : 'Normal';
+
+  filters.push(
+    `[faded]drawtext=text='${displayText}':fontsize=${fontSize}:fontcolor=${ffFontColor}:x=(w-text_w)/2:y=${yPos}:box=1:boxcolor=${ffBgColor}:boxborderw=12:fontstyle=${fontstyle}[vout]`
+  );
+
+  return filters.join(';');
 }
 
 async function runFfmpeg(
   videoPath: string,
   audioPath: string,
   outputPath: string,
-  opts: { hookStart: number; hookDuration: number; text: string }
+  opts: {
+    hookStart: number;
+    hookDuration: number;
+    artistName: string;
+    trackTitle: string;
+    editorSettings: EditorSettings;
+  }
 ): Promise<void> {
-  const { hookStart, hookDuration, text } = opts;
+  const { hookStart, hookDuration, artistName, trackTitle, editorSettings } = opts;
 
-  // Filter complex:
-  //   1. Scale & crop video to 1080x1920 (9:16), loop it to hookDuration
-  //   2. Trim audio to hook segment
-  //   3. Burn text overlay at bottom
-  const filterComplex = [
-    `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,loop=loop=-1:size=500,trim=duration=${hookDuration}[v]`,
-    `[v]drawtext=text='${text.replace(/'/g, "\\'")}':fontsize=48:fontcolor=white:x=(w-text_w)/2:y=h-120:box=1:boxcolor=black@0.5:boxborderw=10[vout]`,
-  ].join(';');
+  const filterComplex = buildFfmpegFilterComplex({
+    hookDuration,
+    artistName,
+    trackTitle,
+    editorSettings,
+  });
 
   await execFileAsync('ffmpeg', [
     '-y',
@@ -211,4 +314,16 @@ async function runFfmpeg(
     '-movflags', '+faststart',
     outputPath,
   ]);
+}
+
+function hexToFfmpegColor(hex: string): string {
+  // ffmpeg expects RRGGBB (no #)
+  return hex.replace('#', '').toUpperCase();
+}
+
+function escapeDrawtext(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/:/g, '\\:');
 }

@@ -41,10 +41,12 @@ export const CAMPAIGN_QUERY = gql`
       trackTitle
       artistName
       trackUrl
+      trackS3Key
       mood
       status
       hookStart
       hookEnd
+      customVideoUrl
       metaCampaignId
       createdAt
       generatedAds {

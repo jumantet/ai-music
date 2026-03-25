@@ -32,7 +32,8 @@
         {
           "photosPermission": "Allow AI Release Toolkit to access your photos for cover art."
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

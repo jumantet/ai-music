@@ -118,8 +118,9 @@ const fr = {
       step1: 'Upload',
       step2: 'Hook',
       step3: 'Mood',
-      step4: 'Génération',
-      step5: 'Export',
+      step4: 'Éditeur',
+      step5: 'Génération',
+      step6: 'Export',
 
       uploadTitle: 'Upload ton morceau',
       uploadSubtitle: 'On va l\'analyser et te proposer les meilleurs hooks pour ta pub.',
@@ -184,13 +185,14 @@ const fr = {
       uploadVideoUploaded: 'Vidéo uploadée',
       uploadVideoSubtitle: "On va la recadrer en 9:16 et synchroniser ton hook.",
 
-      generateTitle: 'Génération de tes ads',
-      generateSubtitle: 'On génère {{count}} variations d\'ads pour toi.',
+      generateTitle: 'Génération de ton ad',
+      generateSubtitle: 'On génère ton ad personnalisée avec tes réglages.',
       generateStep1: 'Analyse audio…',
       generateStep2: 'Matching des visuels…',
       generateStep3: 'Rendu des ads…',
       generateStep4: 'Ajout des overlays texte…',
       generateDone: 'C\'est prêt ! Tes ads sont générées.',
+      generateFinalizing: 'Finalisation en cours…',
       adVariant: 'Ad {{n}}',
 
       exportTitle: 'Tes ads sont prêtes',

@@ -25,6 +25,27 @@ import type { Campaign, GeneratedAd } from '@toolkit/shared';
 
 type Tab = 'ads' | 'campaign';
 
+function AdVideoThumb({ videoUrl, fallback }: { videoUrl: string; fallback: React.ReactNode }) {
+  const [errored, setErrored] = useState(false);
+  if (errored) return <>{fallback}</>;
+  return React.createElement('video', {
+    src: videoUrl,
+    muted: true,
+    playsInline: true,
+    loop: true,
+    autoPlay: true,
+    preload: 'metadata',
+    onError: () => setErrored(true),
+    style: {
+      width: '100%',
+      height: 160,
+      objectFit: 'cover',
+      display: 'block',
+      pointerEvents: 'none',
+    },
+  });
+}
+
 const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bgCard },
@@ -104,6 +125,7 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
       backgroundColor: colors.primaryBg,
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
     },
     adThumbVideo: {
       height: 160,
@@ -287,6 +309,7 @@ export default function CampaignDetailScreen() {
   }
 
   return (
+    <>
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
       {/* Header */}
       <View style={styles.topRow}>
@@ -339,7 +362,14 @@ export default function CampaignDetailScreen() {
                 <View key={ad.id} style={[styles.adCard, selectedAdId === ad.id && { borderColor: colors.primary }]}>
                   <TouchableOpacity onPress={() => setSelectedAdId(selectedAdId === ad.id ? null : ad.id)} activeOpacity={0.9}>
                     <View style={styles.adThumb}>
-                      <Ionicons name="film-outline" size={36} color={colors.primary} />
+                      {ad.videoUrl ? (
+                        <AdVideoThumb
+                          videoUrl={ad.videoUrl}
+                          fallback={<Ionicons name="film-outline" size={36} color={colors.primary} />}
+                        />
+                      ) : (
+                        <Ionicons name="film-outline" size={36} color={colors.primary} />
+                      )}
                     </View>
                   </TouchableOpacity>
                   <View style={styles.adBody}>
@@ -355,12 +385,14 @@ export default function CampaignDetailScreen() {
                           onPress={() => typeof window !== 'undefined' && window.open(ad.videoUrl!, '_blank')}
                         />
                       ) : null}
-                      <Button
-                        label={t('campaigns.detail.regenerate')}
-                        size="sm"
-                        variant="ghost"
-                        onPress={() => {}}
-                      />
+                      {campaign.status !== 'LAUNCHED' && (
+                        <Button
+                          label="Éditer"
+                          size="sm"
+                          variant="ghost"
+                          onPress={() => router.push({ pathname: '/(app)/campaigns/new', params: { editCampaignId: campaign.id } })}
+                        />
+                      )}
                     </View>
                   </View>
                 </View>
@@ -492,5 +524,7 @@ export default function CampaignDetailScreen() {
         </View>
       )}
     </ScrollView>
+
+    </>
   );
 }

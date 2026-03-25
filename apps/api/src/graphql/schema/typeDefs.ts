@@ -110,6 +110,23 @@ export const typeDefs = `#graphql
     campaignUrl: String!
   }
 
+  input EditorSettingsInput {
+    filterPreset: String
+    brightness: Int
+    contrast: Int
+    saturation: Int
+    grain: Int
+    text: String
+    fontFamily: String
+    fontSize: Int
+    fontColor: String
+    textBgColor: String
+    textBgOpacity: Float
+    textPosition: String
+    fadeIn: Float
+    fadeOut: Float
+  }
+
   type AuthPayload {
     token: String!
     user: User!
@@ -148,7 +165,7 @@ export const typeDefs = `#graphql
       customVideoS3Key: String
     ): Campaign!
     deleteCampaign(id: ID!): Boolean!
-    generateAds(campaignId: ID!): Campaign!
+    generateAds(campaignId: ID!, selectedVideoUrl: String, editorSettings: EditorSettingsInput): Campaign!
 
     getUploadUrl(campaignId: ID!, fileType: String!, contentType: String!): UploadUrlPayload!
 

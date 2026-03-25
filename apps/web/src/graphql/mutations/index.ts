@@ -78,8 +78,16 @@ export const UPDATE_CAMPAIGN_MUTATION = gql`
 `;
 
 export const GENERATE_ADS_MUTATION = gql`
-  mutation GenerateAds($campaignId: ID!) {
-    generateAds(campaignId: $campaignId) {
+  mutation GenerateAds(
+    $campaignId: ID!
+    $selectedVideoUrl: String
+    $editorSettings: EditorSettingsInput
+  ) {
+    generateAds(
+      campaignId: $campaignId
+      selectedVideoUrl: $selectedVideoUrl
+      editorSettings: $editorSettings
+    ) {
       id
       status
       generatedAds {

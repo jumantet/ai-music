@@ -13,7 +13,7 @@ import {
   Animated,
   TextInput,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery, useLazyQuery } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -25,15 +25,17 @@ import {
 } from '../../../src/graphql/mutations';
 import { useMutation as useResendMutation } from '@apollo/client';
 import { RESEND_VERIFICATION_MUTATION } from '../../../src/graphql/mutations';
-import { SUGGEST_HOOKS_QUERY, SUGGEST_MOOD_QUERY, SEARCH_VIDEOS_FOR_MOOD_QUERY, ME_QUERY } from '../../../src/graphql/queries';
+import { SUGGEST_HOOKS_QUERY, SUGGEST_MOOD_QUERY, SEARCH_VIDEOS_FOR_MOOD_QUERY, ME_QUERY, CAMPAIGN_QUERY } from '../../../src/graphql/queries';
 import { Button, Card, Input, WaveformHookPicker } from '../../../src/components/ui';
+import { VideoEditorStep, DEFAULT_EDITOR_SETTINGS } from '../../../src/components/ui/VideoEditorStep';
+import type { VideoEditorSettings } from '../../../src/components/ui/VideoEditorStep';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useIsMobile } from '../../../src/hooks/useIsMobile';
 import { spacing, fontSize, radius, fonts } from '../../../src/theme';
 import type { ColorPalette } from '../../../src/theme';
 import type { HookSuggestion, PexelsVideo } from '@toolkit/shared';
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface MoodOption {
   key: string;
@@ -314,6 +316,7 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, thumbWidth: number)
       backgroundColor: colors.primaryBg,
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
     },
     adCardBody: { padding: spacing.md, gap: spacing.xs },
     adLabel: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.textPrimary },
@@ -412,6 +415,8 @@ export default function NewCampaignScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const params = useLocalSearchParams<{ editCampaignId?: string }>();
+  const editCampaignId = params.editCampaignId ?? null;
 
   const styles = useMemo(() => makeStyles(colors, isMobile, 0), [colors, isMobile]);
 
@@ -449,7 +454,38 @@ export default function NewCampaignScreen() {
   const [videoSearchQuery, setVideoSearchQuery] = useState('');
   const [videoSearchActive, setVideoSearchActive] = useState(false);
 
-  // Step 4
+  // Step 4 - editor
+  const [editorSettings, setEditorSettings] = useState<VideoEditorSettings>(DEFAULT_EDITOR_SETTINGS);
+  const [selectedPreviewUrls, setSelectedPreviewUrls] = useState<string[]>([]);
+
+  // Edit existing campaign: load campaign data and jump to step 4
+  const [editLoaded, setEditLoaded] = useState(false);
+  useQuery(CAMPAIGN_QUERY, {
+    variables: { id: editCampaignId },
+    skip: !editCampaignId,
+    onCompleted: (data) => {
+      if (editLoaded) return;
+      const c = data?.campaign;
+      if (!c) return;
+      setCampaignId(c.id);
+      setTrackTitle(c.trackTitle ?? '');
+      setArtistName(c.artistName ?? '');
+      setTrackS3Key(c.trackS3Key ?? '');
+      setTrackUploaded(!!c.trackS3Key || !!c.trackUrl);
+      if (c.mood) setSelectedMood(c.mood);
+      if (c.hookStart != null) setSelectedHook({ start: c.hookStart, end: c.hookEnd, label: '', energy: 0 } as any);
+      if (c.customVideoUrl) {
+        setVideoSource('own');
+        setCustomVideoLocalUrl(c.customVideoUrl);
+        setCustomVideoUploaded(true);
+        setSelectedPreviewUrls([c.customVideoUrl]);
+      }
+      setEditLoaded(true);
+      setStep(4);
+    },
+  });
+
+  // Step 5
   const [generateProgress, setGenerateProgress] = useState(0);
   const [generatedAds, setGeneratedAds] = useState<Array<{ id: string; videoUrl?: string; visualStyle: string; textOverlay?: string }>>([]);
 
@@ -457,6 +493,69 @@ export default function NewCampaignScreen() {
   const [showVerifModal, setShowVerifModal] = useState(false);
   const [resendSent, setResendSent] = useState(false);
   const [resendError, setResendError] = useState(false);
+
+  // Draft resume modal
+  const [showDraftModal, setShowDraftModal] = useState(false);
+  const [savedDraft, setSavedDraft] = useState<null | { campaignId: string; step: Step; trackTitle: string; artistName: string }>(null);
+
+  // On mount: check for a saved draft
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem('campaign_new_draft');
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft?.campaignId && draft?.step > 1) {
+          setSavedDraft(draft);
+          setShowDraftModal(true);
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Auto-save draft whenever meaningful state changes
+  useEffect(() => {
+    if (!campaignId || step < 2) return;
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('campaign_new_draft', JSON.stringify({
+        campaignId,
+        step,
+        trackTitle,
+        artistName,
+        trackS3Key,
+        selectedHook,
+        selectedMood,
+        selectedVideoUrls,
+        selectedPreviewUrls,
+        editorSettings,
+      }));
+    } catch { /* ignore */ }
+  }, [campaignId, step, trackTitle, artistName, trackS3Key, selectedHook, selectedMood, selectedVideoUrls, selectedPreviewUrls, editorSettings]);
+
+  function clearDraft() {
+    if (typeof window !== 'undefined') localStorage.removeItem('campaign_new_draft');
+  }
+
+  function resumeDraft() {
+    if (!savedDraft) return;
+    setShowDraftModal(false);
+    try {
+      const raw = localStorage.getItem('campaign_new_draft');
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      setCampaignId(draft.campaignId);
+      setTrackTitle(draft.trackTitle ?? '');
+      setArtistName(draft.artistName ?? '');
+      setTrackS3Key(draft.trackS3Key ?? '');
+      if (draft.selectedHook) setSelectedHook(draft.selectedHook);
+      if (draft.selectedMood) setSelectedMood(draft.selectedMood);
+      if (draft.selectedVideoUrls?.length) setSelectedVideoUrls(draft.selectedVideoUrls);
+      if (draft.selectedPreviewUrls?.length) setSelectedPreviewUrls(draft.selectedPreviewUrls);
+      if (draft.editorSettings) setEditorSettings(draft.editorSettings);
+      setStep(draft.step ?? 2);
+    } catch { /* ignore */ }
+  }
 
   // Step 1 loading overlay
   const [uploadOverlay, setUploadOverlay] = useState(false);
@@ -587,6 +686,7 @@ export default function NewCampaignScreen() {
     t('campaigns.new.step3'),
     t('campaigns.new.step4'),
     t('campaigns.new.step5'),
+    t('campaigns.new.step6'),
   ];
 
   async function handleUploadTrack() {
@@ -724,7 +824,7 @@ export default function NewCampaignScreen() {
     setStep(3);
   }
 
-  // Step 3 → 4 : hook confirmed, go to generate
+  // Step 3 → 4 : hook confirmed, go to video editor
   async function handleStep3Continue() {
     if (!selectedHook || !campaignId) return;
     setError(null);
@@ -737,17 +837,49 @@ export default function NewCampaignScreen() {
       },
     });
     setStep(4);
+  }
+
+  // Step 4 → 5 : editor confirmed, go to generate
+  function handleStep4Continue() {
+    setStep(5);
     simulateGenerate();
   }
 
   async function simulateGenerate() {
     if (!campaignId) return;
-    for (let i = 1; i <= GENERATE_STEPS.length; i++) {
-      await new Promise((r) => setTimeout(r, 1200));
-      setGenerateProgress(i);
-    }
+
+    // Run animation and API call in parallel
+    const animationPromise = (async () => {
+      for (let i = 1; i <= GENERATE_STEPS.length; i++) {
+        await new Promise((r) => setTimeout(r, 1200));
+        setGenerateProgress(i);
+      }
+    })();
+
+    const selectedVideoUrl = customVideoLocalUrl ?? selectedPreviewUrls[0] ?? null;
+    const apiPromise = generateAds({
+      variables: {
+        campaignId,
+        selectedVideoUrl,
+        editorSettings: {
+          filterPreset: editorSettings.filterPreset,
+          text: editorSettings.text,
+          fontFamily: editorSettings.fontFamily,
+          fontSize: editorSettings.fontSize,
+          fontColor: editorSettings.fontColor,
+          textBgColor: editorSettings.textBgColor,
+          textBgOpacity: editorSettings.textBgOpacity,
+          textPosition: editorSettings.textPosition,
+          fadeIn: editorSettings.fadeIn,
+          fadeOut: editorSettings.fadeOut,
+        },
+      },
+    });
+
+    await animationPromise;
+
     try {
-      const { data } = await generateAds({ variables: { campaignId } });
+      const { data } = await apiPromise;
       setGeneratedAds(data?.generateAds?.generatedAds ?? []);
     } catch {
       setGeneratedAds([
@@ -813,6 +945,7 @@ export default function NewCampaignScreen() {
   }
 
   function handleFinish() {
+    clearDraft();
     if (campaignId) {
       router.replace(`/(app)/campaigns/${campaignId}` as any);
     } else {
@@ -822,6 +955,58 @@ export default function NewCampaignScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
+
+      {/* ── DRAFT RESUME MODAL ── */}
+      <Modal visible={showDraftModal} transparent animationType="fade" onRequestClose={() => setShowDraftModal(false)}>
+        <TouchableWithoutFeedback onPress={() => setShowDraftModal(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg }}>
+            <TouchableWithoutFeedback>
+              <View style={{ backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing.xl, width: '100%', maxWidth: 400, gap: spacing.lg }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                  <View style={{ width: 44, height: 44, borderRadius: radius.full, backgroundColor: colors.primaryBg, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="bookmark-outline" size={22} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary }}>
+                      Brouillon en cours
+                    </Text>
+                    <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 }}>
+                      {savedDraft?.trackTitle} — {savedDraft?.artistName}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20 }}>
+                  Tu as une campagne non terminée. Veux-tu reprendre là où tu t'es arrêté·e ?
+                </Text>
+
+                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingVertical: spacing.sm + 2, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}
+                    onPress={() => { clearDraft(); setShowDraftModal(false); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textSecondary }}>
+                      Recommencer
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flex: 2, paddingVertical: spacing.sm + 2, borderRadius: radius.lg, backgroundColor: colors.primary, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: spacing.xs }}
+                    onPress={resumeDraft}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="play-circle-outline" size={16} color="#fff" />
+                    <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: '#fff' }}>
+                      Reprendre
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       {/* Header */}
       <View style={styles.topRow}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
@@ -836,12 +1021,18 @@ export default function NewCampaignScreen() {
           const stepNum = (i + 1) as Step;
           const isDone = step > stepNum;
           const isActive = step === stepNum;
+          const canNavigate = isDone && stepNum >= 2; // can go back to any completed step (except step 1 which requires a new upload)
           return (
             <React.Fragment key={label}>
               {i > 0 && (
                 <View style={[styles.stepConnector, isDone ? styles.stepConnectorDone : styles.stepConnectorInactive]} />
               )}
-              <View style={styles.stepItem}>
+              <TouchableOpacity
+                style={styles.stepItem}
+                onPress={() => canNavigate && setStep(stepNum)}
+                activeOpacity={canNavigate ? 0.7 : 1}
+                disabled={!canNavigate}
+              >
                 <View style={[styles.stepDot, isDone ? styles.stepDotDone : isActive ? styles.stepDotActive : styles.stepDotInactive]}>
                   {isDone ? (
                     <Ionicons name="checkmark" size={14} color={colors.white} />
@@ -854,7 +1045,7 @@ export default function NewCampaignScreen() {
                 <Text style={[styles.stepLabel, isDone ? styles.stepLabelDone : isActive ? styles.stepLabelActive : styles.stepLabelInactive]}>
                   {label}
                 </Text>
-              </View>
+              </TouchableOpacity>
             </React.Fragment>
           );
         })}
@@ -1226,6 +1417,7 @@ export default function NewCampaignScreen() {
               loading={hooksLoading}
               previewVideoUrl={
                 customVideoLocalUrl ??
+                selectedPreviewUrls[0] ??
                 (videos.length > 0 ? videos[0].previewUrl : undefined)
               }
             />
@@ -1242,13 +1434,26 @@ export default function NewCampaignScreen() {
         </Card>
       )}
 
-      {/* ── STEP 4: Generate ── */}
+      {/* ── STEP 4: Video Editor ── */}
       {step === 4 && (
+        <Card padding="lg">
+          <VideoEditorStep
+            videoUrl={customVideoLocalUrl ?? selectedPreviewUrls[0] ?? ''}
+            settings={editorSettings}
+            onChange={setEditorSettings}
+            onBack={() => setStep(3)}
+            onContinue={handleStep4Continue}
+          />
+        </Card>
+      )}
+
+      {/* ── STEP 5: Generate ── */}
+      {step === 5 && (
         <Card padding="lg">
           <View style={styles.stepCard}>
             <Text style={styles.stepTitle}>{t('campaigns.new.generateTitle')}</Text>
             <Text style={styles.stepSubtitle}>
-              {t('campaigns.new.generateSubtitle', { count: 4 })}
+              {t('campaigns.new.generateSubtitle')}
             </Text>
 
             <View style={styles.progressList}>
@@ -1268,6 +1473,15 @@ export default function NewCampaignScreen() {
               })}
             </View>
 
+            {generateProgress >= GENERATE_STEPS.length && generatedAds.length === 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary }}>
+                  {t('campaigns.new.generateFinalizing')}
+                </Text>
+              </View>
+            )}
+
             {generateProgress >= GENERATE_STEPS.length && generatedAds.length > 0 && (
               <>
                 <Text style={styles.successText}>{t('campaigns.new.generateDone')}</Text>
@@ -1275,22 +1489,38 @@ export default function NewCampaignScreen() {
                   {generatedAds.map((ad, i) => (
                     <View key={ad.id} style={styles.adCard}>
                       <View style={styles.adThumb}>
-                        <Ionicons name="film-outline" size={32} color={colors.primary} />
+                        {(ad.videoUrl || selectedPreviewUrls[0] || customVideoLocalUrl)
+                          ? React.createElement('video', {
+                              src: ad.videoUrl || selectedPreviewUrls[0] || customVideoLocalUrl,
+                              muted: true,
+                              playsInline: true,
+                              loop: true,
+                              autoPlay: true,
+                              preload: 'metadata',
+                              style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' },
+                            })
+                          : <Ionicons name="film-outline" size={32} color={colors.primary} />
+                        }
                       </View>
                       <View style={styles.adCardBody}>
-                        <Text style={styles.adLabel}>{t('campaigns.new.adVariant', { n: i + 1 })}</Text>
+                        <Text style={styles.adLabel}>Ton ad</Text>
                         <Text style={styles.adStyle}>{ad.visualStyle}</Text>
                         {ad.textOverlay ? (
                           <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted, fontStyle: 'italic' }}>
                             "{ad.textOverlay}"
                           </Text>
                         ) : null}
+                        {!ad.videoUrl && (
+                          <Text style={{ fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
+                            Aperçu source — rendu ffmpeg non disponible
+                          </Text>
+                        )}
                       </View>
                     </View>
                   ))}
                 </View>
                 <View style={styles.actions}>
-                  <Button label={t('campaigns.new.continueBtn')} onPress={() => setStep(5)} />
+                  <Button label={t('campaigns.new.continueBtn')} onPress={() => setStep(6)} />
                 </View>
               </>
             )}
@@ -1298,8 +1528,8 @@ export default function NewCampaignScreen() {
         </Card>
       )}
 
-      {/* ── STEP 5: Export & Launch ── */}
-      {step === 5 && (
+      {/* ── STEP 6: Export & Launch ── */}
+      {step === 6 && (
         <Card padding="lg">
           <View style={styles.stepCard}>
             <Text style={styles.stepTitle}>{t('campaigns.new.exportTitle')}</Text>
@@ -1355,6 +1585,7 @@ export default function NewCampaignScreen() {
             </View>
 
             <View style={styles.actions}>
+              <Button label={t('common.back')} variant="secondary" onPress={() => setStep(5)} />
               <Button label={t('campaigns.new.finish')} onPress={handleFinish} />
             </View>
           </View>
@@ -1384,6 +1615,7 @@ export default function NewCampaignScreen() {
                       controls: true,
                       loop: true,
                       playsInline: true,
+                      muted: true,
                       style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
                     })
                   )}
@@ -1420,11 +1652,10 @@ export default function NewCampaignScreen() {
                       }}
                       onPress={() => {
                         if (!previewVideo) return;
-                        setSelectedVideoUrls((prev) =>
-                          prev.includes(previewVideo.url)
-                            ? prev.filter((u) => u !== previewVideo.url)
-                            : [...prev, previewVideo.url]
-                        );
+                        const isSelected = selectedVideoUrls.includes(previewVideo.url);
+                        // Single-select: replace previous selection
+                        setSelectedVideoUrls(isSelected ? [] : [previewVideo.url]);
+                        setSelectedPreviewUrls(isSelected ? [] : [previewVideo.previewUrl]);
                         setPreviewVideo(null);
                       }}
                     >

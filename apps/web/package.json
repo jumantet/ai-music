@@ -27,6 +27,7 @@
     "expo-localization": "^55.0.8",
     "expo-router": "~4.0.17",
     "expo-status-bar": "~2.0.1",
+    "expo-video": "~2.0.6",
     "graphql": "^16.10.0",
     "i18next": "^25.8.18",
     "react": "18.3.1",
