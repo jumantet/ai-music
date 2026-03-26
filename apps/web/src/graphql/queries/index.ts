@@ -1,5 +1,23 @@
 import { gql } from '@apollo/client';
 
+const EDITOR_SETTINGS_FRAGMENT = `
+  editorSettings {
+    filterPreset
+    brightness
+    contrast
+    saturation
+    grain
+    motionPreset
+    text
+    fontFamily
+    fontSize
+    fontColor
+    textBgColor
+    textBgOpacity
+    textPosition
+  }
+`;
+
 export const ME_QUERY = gql`
   query Me {
     me {
@@ -10,26 +28,73 @@ export const ME_QUERY = gql`
       emailVerified
       metaConnected
       metaAdAccountId
+      spotifyArtistId
+      spotifyArtistName
       createdAt
       campaigns {
         id
         trackTitle
         artistName
         trackUrl
-        mood
         status
         hookStart
         hookEnd
+        videoUrl
         metaCampaignId
         createdAt
-        generatedAds {
+        generatedAd {
           id
           videoUrl
-          visualStyle
-          textOverlay
           metaAdId
         }
       }
+    }
+  }
+`;
+
+export const SPOTIFY_SEARCH_ARTISTS_PUBLIC_QUERY = gql`
+  query SpotifySearchArtistsPublic($query: String!) {
+    spotifySearchArtistsPublic(query: $query) {
+      id
+      name
+      imageUrl
+    }
+  }
+`;
+
+export const SPOTIFY_SEARCH_ARTISTS_QUERY = gql`
+  query SpotifySearchArtists($query: String!) {
+    spotifySearchArtists(query: $query) {
+      id
+      name
+      imageUrl
+    }
+  }
+`;
+
+export const SPOTIFY_ARTIST_TRACKS_QUERY = gql`
+  query SpotifyArtistTracks($artistId: ID!, $limit: Int) {
+    spotifyArtistTracks(artistId: $artistId, limit: $limit) {
+      id
+      name
+      artistName
+      albumName
+      albumImageUrl
+      durationMs
+    }
+  }
+`;
+
+export const MY_CATALOG_TRACKS_QUERY = gql`
+  query MyCatalogTracks {
+    myCatalogTracks {
+      id
+      spotifyTrackId
+      name
+      artistName
+      albumName
+      albumImageUrl
+      durationMs
     }
   }
 `;
@@ -40,20 +105,21 @@ export const CAMPAIGN_QUERY = gql`
       id
       trackTitle
       artistName
+      spotifyTrackId
       trackUrl
       trackS3Key
-      mood
       status
       hookStart
       hookEnd
-      customVideoUrl
+      videoS3Key
+      videoUrl
+      ${EDITOR_SETTINGS_FRAGMENT}
       metaCampaignId
       createdAt
-      generatedAds {
+      generatedAd {
         id
         videoUrl
-        visualStyle
-        textOverlay
+        videoS3Key
         metaAdId
         createdAt
       }

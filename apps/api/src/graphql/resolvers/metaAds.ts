@@ -48,7 +48,7 @@ export const metaAdsResolvers = {
       return prisma.user.update({
         where: { id: ctx.user.id },
         data: { metaAccessToken: accessToken, metaAdAccountId: adAccountId },
-        include: { campaigns: { include: { generatedAds: true } } },
+        include: { campaigns: { include: { generatedAd: true } } },
       });
     },
 
@@ -58,7 +58,7 @@ export const metaAdsResolvers = {
       return prisma.user.update({
         where: { id: ctx.user.id },
         data: { metaAccessToken: null, metaAdAccountId: null },
-        include: { campaigns: { include: { generatedAds: true } } },
+        include: { campaigns: { include: { generatedAd: true } } },
       });
     },
 
@@ -86,12 +86,12 @@ export const metaAdsResolvers = {
 
       const campaign = await prisma.campaign.findFirst({
         where: { id: args.campaignId, userId: ctx.user.id },
-        include: { generatedAds: true },
+        include: { generatedAd: true },
       });
       if (!campaign) throw new Error('Campaign not found');
 
-      const ad = campaign.generatedAds.find((a) => a.id === args.adId);
-      if (!ad) throw new Error('Ad not found');
+      const ad = campaign.generatedAd;
+      if (!ad || ad.id !== args.adId) throw new Error('Ad not found');
       if (!ad.videoUrl) throw new Error('Ad video not yet rendered');
 
       const result = await createMetaAdCampaign({

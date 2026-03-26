@@ -5,6 +5,7 @@ import { suggestHooks, detectMood } from '../../services/hookFinder';
 import { generateAdVariants } from '../../services/adGenerator';
 import { searchVideos } from '../../services/pexels';
 import type { AuthContext } from '../../middleware/auth';
+import type { Prisma } from '@prisma/client';
 
 const MOOD_KEYWORDS: Record<string, string[]> = {
   dreamy: ['dreamy blur', 'soft light nature', 'hazy golden hour'],
@@ -15,25 +16,31 @@ const MOOD_KEYWORDS: Record<string, string[]> = {
   urban: ['city street motion', 'urban skyscraper timelapse', 'metro crowd'],
 };
 
+function serializeEditorSettings(raw: Prisma.JsonValue | null | undefined) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  return raw as Record<string, unknown>;
+}
+
 export const campaignResolvers = {
   Query: {
     campaign: async (_: unknown, { id }: { id: string }, ctx: AuthContext) => {
       requireAuth(ctx.user);
       const campaign = await prisma.campaign.findFirst({
         where: { id, userId: ctx.user.id },
-        include: { generatedAds: { orderBy: { createdAt: 'asc' } } },
+        include: { generatedAd: true },
       });
       if (!campaign) throw new Error('Campaign not found');
-      return campaign;
+      return { ...campaign, editorSettings: serializeEditorSettings(campaign.editorSettings) };
     },
 
     campaigns: async (_: unknown, __: unknown, ctx: AuthContext) => {
       requireAuth(ctx.user);
-      return prisma.campaign.findMany({
+      const campaigns = await prisma.campaign.findMany({
         where: { userId: ctx.user.id },
-        include: { generatedAds: true },
+        include: { generatedAd: true },
         orderBy: { createdAt: 'desc' },
       });
+      return campaigns.map(c => ({ ...c, editorSettings: serializeEditorSettings(c.editorSettings) }));
     },
 
     suggestHooks: async (
@@ -46,12 +53,7 @@ export const campaignResolvers = {
         where: { id: campaignId, userId: ctx.user.id },
       });
       if (!campaign) throw new Error('Campaign not found');
-
-      return suggestHooks(
-        campaign.trackS3Key ?? null,
-        campaign.trackTitle,
-        campaign.artistName
-      );
+      return suggestHooks(campaign.trackS3Key ?? null, campaign.trackTitle, campaign.artistName);
     },
 
     suggestMood: async (
@@ -73,7 +75,6 @@ export const campaignResolvers = {
       ctx: AuthContext
     ) => {
       requireAuth(ctx.user);
-
       const keywords = customKeywords?.length
         ? customKeywords
         : (MOOD_KEYWORDS[mood] ?? ['music visual aesthetic', 'abstract motion', 'cinematic blur']);
@@ -84,16 +85,27 @@ export const campaignResolvers = {
   Mutation: {
     createCampaign: async (
       _: unknown,
-      { trackTitle, artistName }: { trackTitle: string; artistName: string },
+      {
+        trackTitle,
+        artistName,
+        spotifyTrackId,
+      }: { trackTitle: string; artistName: string; spotifyTrackId?: string | null },
       ctx: AuthContext
     ) => {
       requireAuth(ctx.user);
       requireVerified(ctx.user);
-
-      return prisma.campaign.create({
-        data: { trackTitle, artistName, userId: ctx.user.id },
-        include: { generatedAds: true },
+      const campaign = await prisma.campaign.create({
+        data: {
+          trackTitle,
+          artistName,
+          userId: ctx.user.id,
+          ...(spotifyTrackId?.trim()
+            ? { spotifyTrackId: spotifyTrackId.trim() }
+            : {}),
+        },
+        include: { generatedAd: true },
       });
+      return { ...campaign, editorSettings: null };
     },
 
     updateCampaign: async (
@@ -102,9 +114,11 @@ export const campaignResolvers = {
         id: string;
         hookStart?: number;
         hookEnd?: number;
-        mood?: string;
         trackS3Key?: string;
-        customVideoS3Key?: string;
+        spotifyTrackId?: string | null;
+        videoS3Key?: string;
+        videoUrl?: string;
+        editorSettings?: Record<string, unknown> | null;
       },
       ctx: AuthContext
     ) => {
@@ -115,24 +129,38 @@ export const campaignResolvers = {
       });
       if (!campaign) throw new Error('Campaign not found');
 
-      const updateData: Record<string, unknown> = {};
+      const updateData: Prisma.CampaignUpdateInput = {};
       if (data.hookStart !== undefined) updateData.hookStart = data.hookStart;
       if (data.hookEnd !== undefined) updateData.hookEnd = data.hookEnd;
-      if (data.mood !== undefined) updateData.mood = data.mood;
       if (data.trackS3Key !== undefined) {
         updateData.trackS3Key = data.trackS3Key;
         updateData.trackUrl = getPublicUrl(data.trackS3Key);
       }
-      if (data.customVideoS3Key !== undefined) {
-        updateData.customVideoS3Key = data.customVideoS3Key;
-        updateData.customVideoUrl = getPublicUrl(data.customVideoS3Key);
+      if (data.spotifyTrackId !== undefined) {
+        updateData.spotifyTrackId =
+          data.spotifyTrackId === null || data.spotifyTrackId === ''
+            ? null
+            : data.spotifyTrackId.trim();
+      }
+      if (data.videoS3Key !== undefined) {
+        updateData.videoS3Key = data.videoS3Key;
+        updateData.videoUrl = getPublicUrl(data.videoS3Key);
+      }
+      // Pexels video: only URL, no S3 key
+      if (data.videoUrl !== undefined && data.videoS3Key === undefined) {
+        updateData.videoUrl = data.videoUrl;
+        updateData.videoS3Key = null;
+      }
+      if (data.editorSettings !== undefined) {
+        updateData.editorSettings = data.editorSettings ?? Prisma.JsonNull;
       }
 
-      return prisma.campaign.update({
+      const updated = await prisma.campaign.update({
         where: { id },
         data: updateData,
-        include: { generatedAds: true },
+        include: { generatedAd: true },
       });
+      return { ...updated, editorSettings: serializeEditorSettings(updated.editorSettings) };
     },
 
     deleteCampaign: async (_: unknown, { id }: { id: string }, ctx: AuthContext) => {
@@ -147,30 +175,7 @@ export const campaignResolvers = {
 
     generateAds: async (
       _: unknown,
-      {
-        campaignId,
-        selectedVideoUrl,
-        editorSettings,
-      }: {
-        campaignId: string;
-        selectedVideoUrl?: string | null;
-        editorSettings?: {
-          filterPreset?: string;
-          brightness?: number;
-          contrast?: number;
-          saturation?: number;
-          grain?: number;
-          text?: string;
-          fontFamily?: string;
-          fontSize?: number;
-          fontColor?: string;
-          textBgColor?: string;
-          textBgOpacity?: number;
-          textPosition?: string;
-          fadeIn?: number;
-          fadeOut?: number;
-        } | null;
-      },
+      { campaignId }: { campaignId: string },
       ctx: AuthContext
     ) => {
       requireAuth(ctx.user);
@@ -178,85 +183,86 @@ export const campaignResolvers = {
 
       const campaign = await prisma.campaign.findFirst({
         where: { id: campaignId, userId: ctx.user.id },
-        include: { generatedAds: true },
+        include: { generatedAd: true },
       });
       if (!campaign) throw new Error('Campaign not found');
+
+      if (!campaign.trackS3Key?.trim()) {
+        throw new Error(
+          'Upload your track audio file before generating ads. Spotify only fills title and artist; the ad uses your uploaded master.'
+        );
+      }
 
       await prisma.campaign.update({
         where: { id: campaignId },
         data: { status: 'GENERATING' },
       });
 
-      const mood = campaign.mood ?? 'dreamy';
       const hookStart = campaign.hookStart ?? 60;
       const hookEnd = campaign.hookEnd ?? 75;
+      const editorSettings = serializeEditorSettings(campaign.editorSettings) ?? {};
 
-      // Priority: 1) explicit selectedVideoUrl from editor, 2) custom upload, 3) Pexels search
-      let videoUrls: string[] = [];
-      if (selectedVideoUrl) {
-        videoUrls = [selectedVideoUrl];
-      } else if (campaign.customVideoUrl) {
-        videoUrls = [campaign.customVideoUrl];
-      } else {
-        const keywords = MOOD_KEYWORDS[mood] ?? ['music visual aesthetic'];
+      // Use stored video; fall back to Pexels search if none
+      let videoUrl = campaign.videoUrl ?? null;
+      if (!videoUrl) {
         try {
-          const result = await searchVideos(keywords, 'portrait', 8, 1);
-          videoUrls = result.videos.map((v) => v.previewUrl);
-        } catch {
-          // Continue without Pexels videos
-        }
+          const result = await searchVideos(
+            ['music visual aesthetic', 'cinematic blur', 'abstract motion'],
+            'portrait', 1, 1
+          );
+          videoUrl = result.videos[0]?.previewUrl ?? null;
+        } catch { /* continue without video */ }
       }
 
-      let variants: Array<{ visualStyle: string; textOverlay: string; videoS3Key: string; videoUrl: string }> = [];
-
+      let result: { videoS3Key: string; videoUrl: string } = { videoS3Key: '', videoUrl: '' };
       try {
-        variants = await generateAdVariants({
+        const variants = await generateAdVariants({
           campaignId,
           trackS3Key: campaign.trackS3Key ?? null,
           hookStart,
           hookEnd,
-          mood,
-          videoUrls,
-          customVideoS3Key: campaign.customVideoS3Key ?? null,
+          videoUrl,
+          videoS3Key: campaign.videoS3Key ?? null,
           artistName: campaign.artistName,
           trackTitle: campaign.trackTitle,
-          editorSettings: editorSettings ?? undefined,
+          editorSettings,
         });
-      } catch {
-        variants = [{
-          visualStyle: mood,
-          textOverlay: editorSettings?.text || 'Out now',
-          videoS3Key: '',
-          videoUrl: '',
-        }];
-      }
+        result = variants[0] ?? result;
+      } catch { /* generator threw */ }
 
-      // Persist generated ads
-      await prisma.generatedAd.deleteMany({ where: { campaignId } });
-      await prisma.generatedAd.createMany({
-        data: variants.map((v) => ({
+      // Last resort: campaign row still has the source video URL from the editor flow
+      const finalVideoUrl =
+        (result.videoUrl && result.videoUrl.trim()) ||
+        (campaign.videoUrl?.trim() ?? '') ||
+        (videoUrl?.trim() ?? '') ||
+        null;
+      const finalS3Key = (result.videoS3Key && result.videoS3Key.trim()) || null;
+
+      await prisma.generatedAd.upsert({
+        where: { campaignId },
+        create: {
           campaignId,
-          visualStyle: v.visualStyle,
-          textOverlay: v.textOverlay,
-          videoS3Key: v.videoS3Key || null,
-          videoUrl: v.videoUrl || null,
-        })),
+          videoS3Key: finalS3Key,
+          videoUrl: finalVideoUrl,
+        },
+        update: {
+          videoS3Key: finalS3Key,
+          videoUrl: finalVideoUrl,
+          metaAdId: null,
+        },
       });
 
-      return prisma.campaign.update({
+      const updated = await prisma.campaign.update({
         where: { id: campaignId },
         data: { status: 'READY' },
-        include: { generatedAds: { orderBy: { createdAt: 'asc' } } },
+        include: { generatedAd: true },
       });
+      return { ...updated, editorSettings: serializeEditorSettings(updated.editorSettings) };
     },
 
     getUploadUrl: async (
       _: unknown,
-      {
-        campaignId,
-        fileType,
-        contentType,
-      }: { campaignId: string; fileType: string; contentType: string },
+      { campaignId, fileType, contentType }: { campaignId: string; fileType: string; contentType: string },
       ctx: AuthContext
     ) => {
       requireAuth(ctx.user);
@@ -269,7 +275,6 @@ export const campaignResolvers = {
       const key = `campaigns/${campaignId}/${fileType}-${Date.now()}.${ext}`;
       const uploadUrl = await getPresignedUploadUrl(key, contentType);
       const fileUrl = getPublicUrl(key);
-
       return { uploadUrl, fileUrl, key };
     },
   },

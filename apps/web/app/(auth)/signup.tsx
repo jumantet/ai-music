@@ -60,19 +60,24 @@ export default function SignupScreen() {
   const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleSignup() {
-    if (!name || !email || !password) { setError(t('auth.signup.errorEmpty')); return; }
-    if (password.length < 8) { setError(t('auth.signup.errorPassword')); return; }
+    if (!email || !password) {
+      setError(t('auth.signup.errorEmpty'));
+      return;
+    }
+    if (password.length < 8) {
+      setError(t('auth.signup.errorPassword'));
+      return;
+    }
     setError('');
     setLoading(true);
     try {
-      await signup(email, password, name);
+      await signup(email, password);
     } catch (e) {
       setError((e as Error).message ?? t('auth.signup.errorFallback'));
     } finally {
@@ -98,9 +103,21 @@ export default function SignupScreen() {
             </View>
           ) : null}
 
-          <Input label={t('auth.signup.nameLabel')} value={name} onChangeText={setName} autoCapitalize="words" placeholder={t('auth.signup.namePlaceholder')} />
-          <Input label={t('auth.signup.emailLabel')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder={t('auth.signup.emailPlaceholder')} />
-          <Input label={t('auth.signup.passwordLabel')} value={password} onChangeText={setPassword} secureTextEntry placeholder={t('auth.signup.passwordPlaceholder')} />
+          <Input
+            label={t('auth.signup.emailLabel')}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            placeholder={t('auth.signup.emailPlaceholder')}
+          />
+          <Input
+            label={t('auth.signup.passwordLabel')}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            placeholder={t('auth.signup.passwordPlaceholder')}
+          />
 
           <Button label={t('auth.signup.submit')} onPress={handleSignup} loading={loading} fullWidth size="lg" />
 

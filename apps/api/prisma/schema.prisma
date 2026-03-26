@@ -23,16 +23,36 @@ model User {
   id               String     @id @default(cuid())
   email            String     @unique
   name             String
-  password         String
+  password         String?
   plan             Plan       @default(FREE)
   stripeCustomerId String?
   emailVerified    Boolean    @default(false)
   verifyToken      String?    @unique
   metaAccessToken  String?
   metaAdAccountId  String?
+  spotifyArtistId   String?
+  spotifyArtistName String?
   campaigns        Campaign[]
+  tracks           Track[]
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
+}
+
+/// Morceaux du catalogue public Spotify synchronisés pour l’artiste lié au compte.
+model Track {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  spotifyTrackId  String
+  name            String
+  artistName      String
+  albumName       String
+  albumImageUrl   String?
+  durationMs      Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, spotifyTrackId])
 }
 
 model Campaign {
@@ -41,28 +61,27 @@ model Campaign {
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   trackTitle     String
   artistName     String
-  trackS3Key       String?
-  trackUrl         String?
-  hookStart        Float?
-  hookEnd          Float?
-  mood             String?
-  customVideoS3Key String?
-  customVideoUrl   String?
-  status           CampaignStatus @default(DRAFT)
+  spotifyTrackId String?
+  trackS3Key     String?
+  trackUrl       String?
+  hookStart      Float?
+  hookEnd        Float?
+  videoS3Key     String?        // source video: custom upload S3 key
+  videoUrl       String?        // source video: Pexels URL or custom upload URL
+  editorSettings Json?          // filter, text, fade settings
+  status         CampaignStatus @default(DRAFT)
   metaCampaignId String?
-  generatedAds   GeneratedAd[]
+  generatedAd    GeneratedAd?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 }
 
 model GeneratedAd {
-  id           String   @id @default(cuid())
-  campaignId   String
-  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  videoS3Key   String?
-  videoUrl     String?
-  visualStyle  String
-  textOverlay  String?
-  metaAdId     String?
-  createdAt    DateTime @default(now())
+  id         String   @id @default(cuid())
+  campaignId String   @unique
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  videoS3Key String?
+  videoUrl   String?
+  metaAdId   String?
+  createdAt  DateTime @default(now())
 }

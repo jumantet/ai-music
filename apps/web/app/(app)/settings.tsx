@@ -1,11 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  Linking,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,8 +39,6 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
       alignSelf: 'center',
     },
 
-    titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-    titleAccent: { width: 4, height: 28, borderRadius: 2, backgroundColor: colors.primary },
     title: {
       fontFamily: fonts.extraBold,
       fontSize: isMobile ? fontSize.xxl : fontSize.xxxl,
@@ -54,24 +46,32 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
     },
 
     successBanner: {
-      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-      backgroundColor: colors.successBg, borderRadius: radius.md,
-      padding: spacing.md, borderWidth: 1, borderColor: colors.success,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      backgroundColor: colors.successBg,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      borderWidth: 1,
+      borderColor: colors.success,
     },
     successText: { color: colors.success, fontSize: fontSize.sm, flex: 1, fontFamily: fonts.regular },
 
     sectionTitle: { fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary, marginBottom: spacing.md },
     accountRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
     avatar: {
-      width: 48, height: 48, borderRadius: radius.full,
-      backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
+      width: 48,
+      height: 48,
+      borderRadius: radius.full,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     avatarText: { color: colors.textInverse, fontFamily: fonts.bold, fontSize: fontSize.lg },
     accountInfo: { flex: 1 },
     accountName: { fontFamily: fonts.semiBold, fontSize: fontSize.md, color: colors.textPrimary },
     accountEmail: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary },
 
-    // Pro upgrade card — blue accents
     upgradeCard: { borderColor: colors.primary, borderWidth: 2 },
     upgradeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md },
     upgradeTitle: { fontFamily: fonts.bold, fontSize: fontSize.xl, color: colors.textPrimary },
@@ -80,9 +80,12 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
     proStarBadge: {
       backgroundColor: colors.primaryBg,
       borderRadius: radius.full,
-      paddingLeft: spacing.sm, paddingRight: spacing.sm,
-      paddingTop: spacing.xs, paddingBottom: spacing.xs,
-      borderWidth: 1, borderColor: colors.primary,
+      paddingLeft: spacing.sm,
+      paddingRight: spacing.sm,
+      paddingTop: spacing.xs,
+      paddingBottom: spacing.xs,
+      borderWidth: 1,
+      borderColor: colors.primary,
     },
     proStarText: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.primary },
     featureList: { gap: spacing.sm },
@@ -99,9 +102,23 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
     aboutValue: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textPrimary },
 
     metaHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-    metaConnectedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.successBg, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+    metaConnectedBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: colors.successBg,
+      borderRadius: radius.full,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 2,
+    },
     metaConnectedText: { fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.success },
-    metaDesc: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.sm },
+    metaDesc: {
+      fontFamily: fonts.regular,
+      fontSize: fontSize.sm,
+      color: colors.textSecondary,
+      lineHeight: 20,
+      marginBottom: spacing.sm,
+    },
     metaLink: { color: colors.primary },
     metaFormActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   });
@@ -137,16 +154,20 @@ export default function SettingsScreen() {
 
   async function handleUpgrade() {
     try {
-      const { data } = await createCheckout();
-      await Linking.openURL(data.createStripeCheckout);
-    } catch (e) { alert((e as Error).message); }
+      const { data: d } = await createCheckout();
+      await Linking.openURL(d.createStripeCheckout);
+    } catch (e) {
+      alert((e as Error).message);
+    }
   }
 
   async function handleManageBilling() {
     try {
-      const { data } = await createPortal();
-      await Linking.openURL(data.createStripePortal);
-    } catch (e) { alert((e as Error).message); }
+      const { data: d } = await createPortal();
+      await Linking.openURL(d.createStripePortal);
+    } catch (e) {
+      alert((e as Error).message);
+    }
   }
 
   async function handleConnectMeta() {
@@ -160,7 +181,9 @@ export default function SettingsScreen() {
       setMetaToken('');
       setMetaAccountId('');
       refetchMe();
-    } catch (e) { alert((e as Error).message); }
+    } catch (e) {
+      alert((e as Error).message);
+    }
   }
 
   async function handleDisconnectMeta() {
@@ -168,7 +191,9 @@ export default function SettingsScreen() {
     try {
       await disconnectMeta();
       refetchMe();
-    } catch (e) { alert((e as Error).message); }
+    } catch (e) {
+      alert((e as Error).message);
+    }
   }
 
   return (
@@ -222,7 +247,14 @@ export default function SettingsScreen() {
               </View>
             ))}
           </View>
-          <Button label={t('settings.upgradeBtn')} onPress={handleUpgrade} loading={checkoutLoading} fullWidth size="lg" style={{ marginTop: spacing.md }} />
+          <Button
+            label={t('settings.upgradeBtn')}
+            onPress={handleUpgrade}
+            loading={checkoutLoading}
+            fullWidth
+            size="lg"
+            style={{ marginTop: spacing.md }}
+          />
         </Card>
       ) : (
         <Card padding="lg">
@@ -231,83 +263,76 @@ export default function SettingsScreen() {
             <Text style={styles.proTitle}>{t('settings.proTitle')}</Text>
           </View>
           <Text style={styles.proSubtitle}>{t('settings.proSubtitle')}</Text>
-          <Button label={t('settings.manageBilling')} onPress={handleManageBilling} loading={portalLoading} variant="secondary" style={{ marginTop: spacing.md }} />
+          <Button
+            label={t('settings.manageBilling')}
+            onPress={handleManageBilling}
+            loading={portalLoading}
+            variant="secondary"
+            style={{ marginTop: spacing.md }}
+          />
         </Card>
       )}
 
       <Card padding="lg">
-          <View style={styles.metaHeader}>
-            <Ionicons name="logo-facebook" size={22} color="#1877F2" />
-            <Text style={styles.sectionTitle} >Meta Ads</Text>
-            {metaConnected && (
-              <View style={styles.metaConnectedBadge}>
-                <Ionicons name="checkmark-circle" size={14} color={colors.success} />
-                <Text style={styles.metaConnectedText}>Connected</Text>
-              </View>
-            )}
-          </View>
-
-          {metaConnected ? (
-            <>
-              <Text style={styles.metaDesc}>
-                Your Meta Business account is connected. You can launch Instagram & Facebook ad campaigns directly from any campaign's Campaign tab.
-              </Text>
-              <Button
-                label={disconnectingMeta ? 'Disconnecting...' : 'Disconnect Meta'}
-                onPress={handleDisconnectMeta}
-                loading={disconnectingMeta}
-                variant="ghost"
-                style={{ marginTop: spacing.md }}
-              />
-            </>
-          ) : showMetaForm ? (
-            <>
-              <Text style={styles.metaDesc}>
-                Enter your Meta User Access Token and Ad Account ID. You can get these from{' '}
-                <Text style={styles.metaLink} onPress={() => Linking.openURL('https://developers.facebook.com/tools/explorer/')}>
-                  Meta Graph API Explorer
-                </Text>
-                .
-              </Text>
-              <Input
-                label="User Access Token"
-                value={metaToken}
-                onChangeText={setMetaToken}
-                placeholder="EAABwzLix..."
-              />
-              <Input
-                label="Ad Account ID"
-                value={metaAccountId}
-                onChangeText={setMetaAccountId}
-                placeholder="123456789"
-              />
-              <View style={styles.metaFormActions}>
-                <Button
-                  label={connectingMeta ? 'Connecting...' : 'Connect'}
-                  onPress={handleConnectMeta}
-                  loading={connectingMeta}
-                />
-                <Button
-                  label="Cancel"
-                  onPress={() => setShowMetaForm(false)}
-                  variant="ghost"
-                />
-              </View>
-            </>
-          ) : (
-            <>
-              <Text style={styles.metaDesc}>
-                Connect your Meta Business account to launch Instagram Reels & Stories ad campaigns directly from your generated ads.
-              </Text>
-              <Button
-                label="Connect Meta Business"
-                onPress={() => setShowMetaForm(true)}
-                variant="secondary"
-                style={{ marginTop: spacing.md }}
-              />
-            </>
+        <View style={styles.metaHeader}>
+          <Ionicons name="logo-facebook" size={22} color="#1877F2" />
+          <Text style={styles.sectionTitle}>Meta Ads</Text>
+          {metaConnected && (
+            <View style={styles.metaConnectedBadge}>
+              <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+              <Text style={styles.metaConnectedText}>Connected</Text>
+            </View>
           )}
-        </Card>
+        </View>
+
+        {metaConnected ? (
+          <>
+            <Text style={styles.metaDesc}>
+              Your Meta Business account is connected. You can launch Instagram & Facebook ad campaigns directly from any
+              campaign&apos;s Campaign tab.
+            </Text>
+            <Button
+              label={disconnectingMeta ? 'Disconnecting...' : 'Disconnect Meta'}
+              onPress={handleDisconnectMeta}
+              loading={disconnectingMeta}
+              variant="ghost"
+              style={{ marginTop: spacing.md }}
+            />
+          </>
+        ) : showMetaForm ? (
+          <>
+            <Text style={styles.metaDesc}>
+              Enter your Meta User Access Token and Ad Account ID. You can get these from{' '}
+              <Text
+                style={styles.metaLink}
+                onPress={() => Linking.openURL('https://developers.facebook.com/tools/explorer/')}
+              >
+                Meta Graph API Explorer
+              </Text>
+              .
+            </Text>
+            <Input label="User Access Token" value={metaToken} onChangeText={setMetaToken} placeholder="EAABwzLix..." />
+            <Input label="Ad Account ID" value={metaAccountId} onChangeText={setMetaAccountId} placeholder="123456789" />
+            <View style={styles.metaFormActions}>
+              <Button label={connectingMeta ? 'Connecting...' : 'Connect'} onPress={handleConnectMeta} loading={connectingMeta} />
+              <Button label="Cancel" onPress={() => setShowMetaForm(false)} variant="ghost" />
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.metaDesc}>
+              Connect your Meta Business account to launch Instagram Reels & Stories ad campaigns directly from your
+              generated ads.
+            </Text>
+            <Button
+              label="Connect Meta Business"
+              onPress={() => setShowMetaForm(true)}
+              variant="secondary"
+              style={{ marginTop: spacing.md }}
+            />
+          </>
+        )}
+      </Card>
 
       <Card padding="lg">
         <Text style={styles.sectionTitle}>{t('settings.sectionAbout')}</Text>

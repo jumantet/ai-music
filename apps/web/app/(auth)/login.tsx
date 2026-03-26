@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Link } from 'expo-router';
+import { ApolloError } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/hooks/useTheme';
@@ -76,6 +77,13 @@ export default function LoginScreen() {
     try {
       await login(email, password);
     } catch (e) {
+      if (e instanceof ApolloError) {
+        const code = e.graphQLErrors[0]?.extensions?.code;
+        if (code === 'LOGIN_NO_PASSWORD') {
+          setError(t('auth.login.errorNoPassword'));
+          return;
+        }
+      }
       setError((e as Error).message ?? t('auth.login.errorFallback'));
     } finally {
       setLoading(false);

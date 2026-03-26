@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   View,
   Text,
@@ -10,11 +11,10 @@ import {
   Modal,
   TouchableWithoutFeedback,
   Image,
-  Animated,
   TextInput,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMutation, useQuery, useLazyQuery } from '@apollo/client';
+import { useMutation, useQuery, useApolloClient } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import {
@@ -22,34 +22,54 @@ import {
   UPDATE_CAMPAIGN_MUTATION,
   GENERATE_ADS_MUTATION,
   GET_UPLOAD_URL_MUTATION,
+  LINK_SPOTIFY_ARTIST_MUTATION,
+  SYNC_MY_CATALOG_TRACKS_MUTATION,
 } from '../../../src/graphql/mutations';
 import { useMutation as useResendMutation } from '@apollo/client';
 import { RESEND_VERIFICATION_MUTATION } from '../../../src/graphql/mutations';
-import { SUGGEST_HOOKS_QUERY, SUGGEST_MOOD_QUERY, SEARCH_VIDEOS_FOR_MOOD_QUERY, ME_QUERY, CAMPAIGN_QUERY } from '../../../src/graphql/queries';
-import { Button, Card, Input, WaveformHookPicker } from '../../../src/components/ui';
+import {
+  SUGGEST_HOOKS_QUERY,
+  SUGGEST_MOOD_QUERY,
+  SEARCH_VIDEOS_FOR_MOOD_QUERY,
+  CAMPAIGN_QUERY,
+  ME_QUERY,
+  MY_CATALOG_TRACKS_QUERY,
+} from '../../../src/graphql/queries';
+import { Button, Card, LinkSpotifyArtistModal } from '../../../src/components/ui';
 import { VideoEditorStep, DEFAULT_EDITOR_SETTINGS } from '../../../src/components/ui/VideoEditorStep';
 import type { VideoEditorSettings } from '../../../src/components/ui/VideoEditorStep';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useIsMobile } from '../../../src/hooks/useIsMobile';
 import { spacing, fontSize, radius, fonts } from '../../../src/theme';
 import type { ColorPalette } from '../../../src/theme';
-import type { HookSuggestion, PexelsVideo } from '@toolkit/shared';
+import type { HookSuggestion } from '@toolkit/shared';
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
+type WizardStep = 1 | 4 | 5 | 6;
+const WIZARD_STEPS: WizardStep[] = [1, 4, 5, 6];
 
-interface MoodOption {
-  key: string;
-  label: string;
-  videoKeywords: string[];
-  icon: string;
+function normalizeHookEnergy(h: {
+  start: number;
+  end: number;
+  label?: string;
+  energy?: string;
+}): HookSuggestion {
+  const e = h.energy;
+  const energy: HookSuggestion['energy'] =
+    e === 'high' || e === 'chorus' || e === 'build' ? e : 'chorus';
+  return {
+    start: h.start,
+    end: h.end,
+    label: h.label ?? '',
+    energy,
+  };
 }
 
-const DEFAULT_MOODS: MoodOption[] = [
-  { key: 'dreamy', label: 'Dreamy & Ethereal', videoKeywords: [], icon: 'partly-sunny-outline' },
-  { key: 'night_drive', label: 'Night Drive', videoKeywords: [], icon: 'moon-outline' },
-  { key: 'raw_indie', label: 'Raw Indie', videoKeywords: [], icon: 'musical-note-outline' },
-  { key: 'psychedelic', label: 'Psychedelic', videoKeywords: [], icon: 'color-palette-outline' },
-];
+function formatTrackDurationMs(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, '0')}`;
+}
 
 const GENERATE_STEPS = [
   'generateStep1',
@@ -67,6 +87,58 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, thumbWidth: number)
       maxWidth: 720,
       width: '100%',
       alignSelf: 'center',
+    },
+    /** Étape éditeur : contenu scroll pleine largeur viewport */
+    containerFullBleed: {
+      flexGrow: 1,
+      gap: spacing.lg,
+      width: '100%',
+      maxWidth: '100%' as any,
+      alignSelf: 'stretch',
+      alignItems: 'stretch',
+      paddingHorizontal: 0,
+      paddingTop: isMobile ? spacing.md : spacing.xl,
+      paddingBottom: spacing.xl * 2,
+    },
+    /** Étape 4 : pas de ScrollView page — colonne vidéo + panneau en flex, hauteur viewport */
+    editorStep4Root: {
+      flex: 1,
+      width: '100%' as any,
+      minHeight: 0,
+      ...(Platform.OS === 'web' ? ({ height: '100%' as any } as const) : {}),
+    },
+    editorStep4Body: {
+      flex: 1,
+      minHeight: 0,
+      width: '100%' as any,
+    },
+    editorStep4FabOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      pointerEvents: 'box-none' as const,
+      zIndex: 999,
+    },
+    editorStep4Fab: {
+      position: 'absolute' as const,
+      right: spacing.lg,
+      bottom: spacing.lg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 22,
+      paddingVertical: 14,
+      borderRadius: 9999,
+      elevation: 14,
+    },
+    editorStep4FabLabel: {
+      fontFamily: fonts.semiBold,
+      fontSize: fontSize.md,
+    },
+    /** Header + stepper restent lisibles au centre quand l’éditeur est full-bleed */
+    editorPageHeader: {
+      paddingHorizontal: isMobile ? spacing.md : spacing.xl,
+      maxWidth: 720,
+      width: '100%',
+      alignSelf: 'center',
+      gap: spacing.lg,
     },
 
     // Header
@@ -302,25 +374,15 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, thumbWidth: number)
     progressLabelPending: { color: colors.textMuted },
 
     // Ad variation cards
-    adGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-    adCard: {
-      width: isMobile ? '100%' : ('47%' as any),
+    adGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, justifyContent: 'center' },
+    adVideoBlock: {
+      width: isMobile ? '60%' : 220,
+      aspectRatio: 9 / 16,
       borderRadius: radius.xl,
       overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.bgElevated,
-    },
-    adThumb: {
-      height: 120,
       backgroundColor: colors.primaryBg,
-      alignItems: 'center',
-      justifyContent: 'center',
-      overflow: 'hidden',
+      alignSelf: 'center',
     },
-    adCardBody: { padding: spacing.md, gap: spacing.xs },
-    adLabel: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.textPrimary },
-    adStyle: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted },
 
     // Export buttons
     exportGrid: { gap: spacing.sm },
@@ -357,60 +419,6 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, thumbWidth: number)
     },
   });
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function energyLabel(energy: string, t: (k: string) => string): string {
-  if (energy === 'high') return t('campaigns.new.hookEnergyHigh');
-  if (energy === 'chorus') return t('campaigns.new.hookEnergyChorus');
-  return t('campaigns.new.hookEnergyBuild');
-}
-
-const COLS_DESKTOP = 4;
-const COLS_MOBILE = 2;
-
-function VideoSkeletonGrid({ isMobile, colors }: { isMobile: boolean; colors: ColorPalette }) {
-  const pulse = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.4, duration: 700, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [pulse]);
-
-  const cols = isMobile ? COLS_MOBILE : COLS_DESKTOP;
-  const rows = 2;
-
-  return (
-    <View style={{ gap: spacing.sm }}>
-      {Array.from({ length: rows }).map((_, rowIdx) => (
-        <View key={rowIdx} style={{ flexDirection: 'row', gap: spacing.sm }}>
-          {Array.from({ length: cols }).map((_, colIdx) => (
-            <Animated.View
-              key={colIdx}
-              style={{
-                flex: 1,
-                aspectRatio: 9 / 16,
-                borderRadius: radius.md,
-                backgroundColor: colors.bgElevated,
-                opacity: pulse,
-              }}
-            />
-          ))}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 export default function NewCampaignScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -420,41 +428,31 @@ export default function NewCampaignScreen() {
 
   const styles = useMemo(() => makeStyles(colors, isMobile, 0), [colors, isMobile]);
 
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<WizardStep>(1);
+  const apolloClient = useApolloClient();
 
-  // Step 1
+  // Step 1 — titre & artiste viennent du choix Spotify
   const [trackTitle, setTrackTitle] = useState('');
   const [artistName, setArtistName] = useState('');
   const [trackUploaded, setTrackUploaded] = useState(false);
   const [trackS3Key, setTrackS3Key] = useState('');
   const [uploading, setUploading] = useState(false);
   const [pendingTrackFile, setPendingTrackFile] = useState<File | null>(null);
+  const [pickedSpotifyTrackId, setPickedSpotifyTrackId] = useState<string | null>(null);
+  const [pickedSpotifyCoverUrl, setPickedSpotifyCoverUrl] = useState<string | null>(null);
+  const [spotifyModalVisible, setSpotifyModalVisible] = useState(false);
+  const [trackPickerFilter, setTrackPickerFilter] = useState('');
+  const [artistLinkModalOpen, setArtistLinkModalOpen] = useState(false);
+  const initialCatalogSyncDone = useRef(false);
   const [campaignId, setCampaignId] = useState<string | null>(null);
 
-  // Step 2
-  const [selectedHook, setSelectedHook] = useState<HookSuggestion | null>(null);
-  const [hookSuggestions, setHookSuggestions] = useState<HookSuggestion[]>([]);
-
-  // Step 3
-  const [selectedMood, setSelectedMood] = useState<string | null>(null);
-  const [aiSuggestedMood, setAiSuggestedMood] = useState<string | null>(null);
-  const [moodVideoKeywords, setMoodVideoKeywords] = useState<string[]>([]);
-  const [aiMoods, setAiMoods] = useState<MoodOption[] | null>(null);
-  const [moodsLoading, setMoodsLoading] = useState(false);
-
-  const displayMoods = aiMoods ?? DEFAULT_MOODS;
-  const [selectedVideoUrls, setSelectedVideoUrls] = useState<string[]>([]);
   const [videoSource, setVideoSource] = useState<'stock' | 'own'>('stock');
   const [customVideoS3Key, setCustomVideoS3Key] = useState('');
   const [customVideoUploaded, setCustomVideoUploaded] = useState(false);
   const [customVideoLocalUrl, setCustomVideoLocalUrl] = useState<string | null>(null);
   const [customVideoFileName, setCustomVideoFileName] = useState('');
-  const [videoUploading, setVideoUploading] = useState(false);
-  const [previewVideo, setPreviewVideo] = useState<PexelsVideo | null>(null);
-  const [videoSearchQuery, setVideoSearchQuery] = useState('');
-  const [videoSearchActive, setVideoSearchActive] = useState(false);
 
-  // Step 4 - editor
+  // Éditeur vidéo
   const [editorSettings, setEditorSettings] = useState<VideoEditorSettings>(DEFAULT_EDITOR_SETTINGS);
   const [selectedPreviewUrls, setSelectedPreviewUrls] = useState<string[]>([]);
 
@@ -470,16 +468,20 @@ export default function NewCampaignScreen() {
       setCampaignId(c.id);
       setTrackTitle(c.trackTitle ?? '');
       setArtistName(c.artistName ?? '');
+      setPickedSpotifyTrackId(c.spotifyTrackId ?? null);
+      setPickedSpotifyCoverUrl(null);
       setTrackS3Key(c.trackS3Key ?? '');
       setTrackUploaded(!!c.trackS3Key || !!c.trackUrl);
-      if (c.mood) setSelectedMood(c.mood);
-      if (c.hookStart != null) setSelectedHook({ start: c.hookStart, end: c.hookEnd, label: '', energy: 0 } as any);
-      if (c.customVideoUrl) {
-        setVideoSource('own');
-        setCustomVideoLocalUrl(c.customVideoUrl);
-        setCustomVideoUploaded(true);
-        setSelectedPreviewUrls([c.customVideoUrl]);
+      if (c.videoUrl) {
+        setCustomVideoLocalUrl(c.videoUrl);
+        setSelectedPreviewUrls([c.videoUrl]);
+        if (c.videoS3Key) {
+          setVideoSource('own');
+          setCustomVideoS3Key(c.videoS3Key);
+          setCustomVideoUploaded(true);
+        }
       }
+      if (c.editorSettings) setEditorSettings({ ...DEFAULT_EDITOR_SETTINGS, ...c.editorSettings });
       setEditLoaded(true);
       setStep(4);
     },
@@ -494,68 +496,6 @@ export default function NewCampaignScreen() {
   const [resendSent, setResendSent] = useState(false);
   const [resendError, setResendError] = useState(false);
 
-  // Draft resume modal
-  const [showDraftModal, setShowDraftModal] = useState(false);
-  const [savedDraft, setSavedDraft] = useState<null | { campaignId: string; step: Step; trackTitle: string; artistName: string }>(null);
-
-  // On mount: check for a saved draft
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const raw = localStorage.getItem('campaign_new_draft');
-      if (raw) {
-        const draft = JSON.parse(raw);
-        if (draft?.campaignId && draft?.step > 1) {
-          setSavedDraft(draft);
-          setShowDraftModal(true);
-        }
-      }
-    } catch { /* ignore */ }
-  }, []);
-
-  // Auto-save draft whenever meaningful state changes
-  useEffect(() => {
-    if (!campaignId || step < 2) return;
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem('campaign_new_draft', JSON.stringify({
-        campaignId,
-        step,
-        trackTitle,
-        artistName,
-        trackS3Key,
-        selectedHook,
-        selectedMood,
-        selectedVideoUrls,
-        selectedPreviewUrls,
-        editorSettings,
-      }));
-    } catch { /* ignore */ }
-  }, [campaignId, step, trackTitle, artistName, trackS3Key, selectedHook, selectedMood, selectedVideoUrls, selectedPreviewUrls, editorSettings]);
-
-  function clearDraft() {
-    if (typeof window !== 'undefined') localStorage.removeItem('campaign_new_draft');
-  }
-
-  function resumeDraft() {
-    if (!savedDraft) return;
-    setShowDraftModal(false);
-    try {
-      const raw = localStorage.getItem('campaign_new_draft');
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      setCampaignId(draft.campaignId);
-      setTrackTitle(draft.trackTitle ?? '');
-      setArtistName(draft.artistName ?? '');
-      setTrackS3Key(draft.trackS3Key ?? '');
-      if (draft.selectedHook) setSelectedHook(draft.selectedHook);
-      if (draft.selectedMood) setSelectedMood(draft.selectedMood);
-      if (draft.selectedVideoUrls?.length) setSelectedVideoUrls(draft.selectedVideoUrls);
-      if (draft.selectedPreviewUrls?.length) setSelectedPreviewUrls(draft.selectedPreviewUrls);
-      if (draft.editorSettings) setEditorSettings(draft.editorSettings);
-      setStep(draft.step ?? 2);
-    } catch { /* ignore */ }
-  }
 
   // Step 1 loading overlay
   const [uploadOverlay, setUploadOverlay] = useState(false);
@@ -593,101 +533,182 @@ export default function NewCampaignScreen() {
   const [generateAds, { loading: generating }] = useMutation(GENERATE_ADS_MUTATION);
   const [getUploadUrl] = useMutation(GET_UPLOAD_URL_MUTATION);
 
-  const [loadHooks, { loading: hooksLoading }] = useLazyQuery(SUGGEST_HOOKS_QUERY, {
-    onCompleted: (data) => {
-      const hooks = data?.suggestHooks ?? [];
-      setHookSuggestions(hooks);
-      // Auto-select the first suggestion so the user can continue without interaction
-      if (hooks.length > 0) {
-        setSelectedHook(hooks[0]);
-      }
-    },
+  const { data: meData, refetch: refetchMe } = useQuery(ME_QUERY, {
+    skip: Boolean(editCampaignId),
   });
+  const spotifyArtistId = meData?.me?.spotifyArtistId ?? null;
 
-  const [loadMoodSuggestion] = useLazyQuery(SUGGEST_MOOD_QUERY, {
-    onCompleted: (data) => {
-      const suggestion = data?.suggestMood;
-      if (!suggestion?.moods?.length) return;
-      const moods: MoodOption[] = suggestion.moods;
-      setAiMoods(moods);
-      setMoodsLoading(false);
-      // Auto-select the first (best) mood
-      const first = moods[0];
-      setAiSuggestedMood(first.key);
-      setMoodVideoKeywords(first.videoKeywords ?? []);
-      setSelectedMood(first.key);
-      setVideoPage(1);
-      loadVideos({ variables: { mood: first.key, page: 1, keywords: first.videoKeywords } });
-    },
+  const {
+    data: catalogQueryData,
+    loading: catalogTracksLoading,
+    error: catalogQueryError,
+    refetch: refetchCatalogTracks,
+  } = useQuery(MY_CATALOG_TRACKS_QUERY, {
+    skip: Boolean(editCampaignId) || !spotifyArtistId,
+    fetchPolicy: 'cache-and-network',
   });
+  const catalogTracks = catalogQueryData?.myCatalogTracks ?? [];
 
-  const [videoPage, setVideoPage] = useState(1);
-  const [loadVideos, { loading: videosLoading, data: videosData }] = useLazyQuery(SEARCH_VIDEOS_FOR_MOOD_QUERY);
-  const videosPage = videosData?.searchVideosForMood;
-  const videos: PexelsVideo[] = videosPage?.videos ?? [];
-  const videoTotalResults: number = videosPage?.totalResults ?? 0;
-  const videoPerPage: number = videosPage?.perPage ?? 8;
-  const totalVideoPages = Math.ceil(videoTotalResults / videoPerPage);
+  const [syncCatalogTracks, { loading: syncingCatalog }] = useMutation(SYNC_MY_CATALOG_TRACKS_MUTATION);
+  const [linkSpotifyArtist, { loading: linkingArtist }] = useMutation(LINK_SPOTIFY_ARTIST_MUTATION);
 
-  const videoGrid = useMemo(() => {
-    const cols = isMobile ? COLS_MOBILE : COLS_DESKTOP;
-    const items = videos.slice(0, 8);
-    const rows: PexelsVideo[][] = [];
-    for (let i = 0; i < items.length; i += cols) rows.push(items.slice(i, i + cols));
-    return (
-      <View style={{ gap: spacing.sm }}>
-        {rows.map((row, rowIdx) => (
-          <View key={rowIdx} style={{ flexDirection: 'row', gap: spacing.sm }}>
-            {row.map((v) => {
-              const isSelected = selectedVideoUrls.includes(v.url);
-              return (
-                <TouchableOpacity
-                  key={v.id}
-                  style={{ flex: 1, aspectRatio: 9 / 16 }}
-                  onPress={() => setPreviewVideo(v)}
-                  activeOpacity={0.85}
-                >
-                  <View style={[
-                    { flex: 1, borderRadius: radius.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
-                    isSelected ? styles.videoThumbSelected : styles.videoThumbIdle,
-                  ]}>
-                    <Image
-                      source={{ uri: v.thumbnailUrl }}
-                      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-                      resizeMode="cover"
-                    />
-                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: isSelected ? 'rgba(79,126,255,0.4)' : 'rgba(0,0,0,0.3)' }} />
-                    {isSelected ? (
-                      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="checkmark" size={18} color={colors.white} />
-                      </View>
-                    ) : (
-                      <Ionicons name="play-circle-outline" size={32} color="rgba(255,255,255,0.9)" />
-                    )}
-                    <Text style={[styles.videoCredit, { color: 'rgba(255,255,255,0.75)' }]} numberOfLines={1}>
-                      {v.photographer}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-            {Array(cols - row.length).fill(null).map((_, i) => (
-              <View key={`empty-${i}`} style={{ flex: 1 }} />
-            ))}
-          </View>
-        ))}
-      </View>
+  const filteredCatalogTracks = useMemo(() => {
+    const f = trackPickerFilter.trim().toLowerCase();
+    if (!f) return catalogTracks;
+    return catalogTracks.filter(
+      (tr: { name: string; albumName: string }) =>
+        tr.name.toLowerCase().includes(f) || tr.albumName.toLowerCase().includes(f)
     );
-  }, [videos, isMobile, selectedVideoUrls, colors, styles]);
+  }, [catalogTracks, trackPickerFilter]);
+
+  useEffect(() => {
+    if (editCampaignId || step !== 1 || !spotifyArtistId || !meData?.me?.emailVerified) return;
+    if (initialCatalogSyncDone.current) return;
+    initialCatalogSyncDone.current = true;
+    (async () => {
+      try {
+        await syncCatalogTracks();
+      } catch {
+        /* Spotify / réseau */
+      }
+      await refetchCatalogTracks();
+    })();
+  }, [editCampaignId, step, spotifyArtistId, meData?.me?.emailVerified, syncCatalogTracks, refetchCatalogTracks]);
+
+  const handleArtistLinkedForCampaign = useCallback(
+    async (a: { id: string; name: string }) => {
+      await linkSpotifyArtist({ variables: { spotifyArtistId: a.id, spotifyArtistName: a.name } });
+      setArtistLinkModalOpen(false);
+      initialCatalogSyncDone.current = true;
+      await refetchMe();
+      await refetchCatalogTracks();
+    },
+    [linkSpotifyArtist, refetchMe, refetchCatalogTracks]
+  );
+
+  function closeSpotifyCatalogModal() {
+    setSpotifyModalVisible(false);
+    setTrackPickerFilter('');
+  }
+
+  async function openSpotifyCatalogModal() {
+    setTrackPickerFilter('');
+    setSpotifyModalVisible(true);
+    await refetchCatalogTracks();
+  }
+
+  async function handleRefreshCatalogInModal() {
+    try {
+      await syncCatalogTracks();
+    } catch {
+      /* */
+    }
+    await refetchCatalogTracks();
+  }
+
+  function handlePickSpotifyCatalogTrack(tr: {
+    spotifyTrackId: string;
+    name: string;
+    artistName: string;
+    albumImageUrl?: string | null;
+  }) {
+    setTrackTitle(tr.name);
+    setArtistName(tr.artistName);
+    setPickedSpotifyTrackId(tr.spotifyTrackId);
+    setPickedSpotifyCoverUrl(tr.albumImageUrl ?? null);
+    closeSpotifyCatalogModal();
+  }
 
   const STEP_LABELS = [
-    t('campaigns.new.step1'),
-    t('campaigns.new.step2'),
-    t('campaigns.new.step3'),
-    t('campaigns.new.step4'),
+    t('campaigns.new.wizardStepTrack'),
+    t('campaigns.new.wizardStepEditor'),
     t('campaigns.new.step5'),
     t('campaigns.new.step6'),
   ];
+
+  async function prepareVisualsAndHooksForEditor(campaignId: string, s3Key: string) {
+    try {
+      const [hooksResult, moodResult] = await Promise.all([
+        apolloClient.query({
+          query: SUGGEST_HOOKS_QUERY,
+          variables: { campaignId },
+          fetchPolicy: 'network-only',
+        }),
+        apolloClient.query({
+          query: SUGGEST_MOOD_QUERY,
+          variables: { campaignId },
+          fetchPolicy: 'network-only',
+        }),
+      ]);
+
+      const rawHooks = hooksResult.data?.suggestHooks ?? [];
+      const hooks = rawHooks.map((h: { start: number; end: number; label?: string; energy?: string }) =>
+        normalizeHookEnergy(h)
+      );
+      const moods = moodResult.data?.suggestMood?.moods ?? [];
+      const firstMood = moods[0];
+      const moodKey = firstMood?.key ?? 'dreamy';
+      const keywords: string[] = (firstMood?.videoKeywords ?? []).filter(Boolean);
+
+      let videosRes = await apolloClient.query({
+        query: SEARCH_VIDEOS_FOR_MOOD_QUERY,
+        variables: { mood: moodKey, page: 1, ...(keywords.length ? { keywords } : {}) },
+        fetchPolicy: 'network-only',
+      });
+      let videos = videosRes.data?.searchVideosForMood?.videos ?? [];
+      if (videos.length === 0 && keywords.length) {
+        videosRes = await apolloClient.query({
+          query: SEARCH_VIDEOS_FOR_MOOD_QUERY,
+          variables: { mood: moodKey, page: 1 },
+          fetchPolicy: 'network-only',
+        });
+        videos = videosRes.data?.searchVideosForMood?.videos ?? [];
+      }
+      if (videos.length === 0) {
+        videosRes = await apolloClient.query({
+          query: SEARCH_VIDEOS_FOR_MOOD_QUERY,
+          variables: { mood: 'dreamy', page: 1 },
+          fetchPolicy: 'network-only',
+        });
+        videos = videosRes.data?.searchVideosForMood?.videos ?? [];
+      }
+
+      const first = videos[0];
+      const previewUrl = first?.previewUrl || first?.url || null;
+
+      if (previewUrl) {
+        setSelectedPreviewUrls([previewUrl]);
+      }
+
+      await updateCampaign({
+        variables: { id: campaignId, videoUrl: previewUrl },
+      });
+
+      const hook =
+        hooks[0] ??
+        normalizeHookEnergy({ start: 0, end: 15, label: 'intro', energy: 'chorus' });
+
+      await updateCampaign({
+        variables: {
+          id: campaignId,
+          hookStart: hook.start,
+          hookEnd: hook.end,
+          trackS3Key: s3Key || undefined,
+        },
+      });
+    } catch (e) {
+      console.warn('[wizard] prepareVisualsAndHooksForEditor', e);
+      const fallback = normalizeHookEnergy({ start: 0, end: 15, label: 'intro', energy: 'chorus' });
+      await updateCampaign({
+        variables: {
+          id: campaignId,
+          hookStart: fallback.start,
+          hookEnd: fallback.end,
+          trackS3Key: s3Key || undefined,
+        },
+      }).catch(() => {});
+    }
+  }
 
   async function handleUploadTrack() {
     if (Platform.OS !== 'web') return;
@@ -703,7 +724,7 @@ export default function NewCampaignScreen() {
     input.click();
   }
 
-  async function uploadPendingTrack(id: string, file: File) {
+  async function uploadPendingTrack(id: string, file: File): Promise<string> {
     setUploading(true);
     try {
       const { data, errors } = await getUploadUrl({
@@ -718,50 +739,28 @@ export default function NewCampaignScreen() {
         throw new Error(`Storage error ${res.status}: ${text}`);
       }
       setTrackS3Key(key);
+      return key;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       console.error('[upload] uploadPendingTrack error:', msg);
       setError(`Upload failed: ${msg}`);
+      throw err;
     } finally {
       setUploading(false);
     }
   }
 
-  async function handleUploadVideo() {
-    if (!campaignId) return;
-    setVideoUploading(true);
-    setError(null);
-    try {
-      if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'video/mp4,video/quicktime,video/webm,video/*';
-        input.onchange = async (e: Event) => {
-          const file = (e.target as HTMLInputElement).files?.[0];
-          if (!file) { setVideoUploading(false); return; }
-          const localUrl = URL.createObjectURL(file);
-          setCustomVideoLocalUrl(localUrl);
-          setCustomVideoFileName(file.name);
-          const { data } = await getUploadUrl({
-            variables: { campaignId, fileType: 'custom-video', contentType: file.type },
-          });
-          const { uploadUrl, key } = data.getUploadUrl;
-          await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
-          setCustomVideoS3Key(key);
-          setCustomVideoUploaded(true);
-          setVideoUploading(false);
-        };
-        input.click();
-      }
-    } catch {
-      setError('Video upload failed. Please try again.');
-      setVideoUploading(false);
-    }
-  }
-
   async function handleStep1Continue() {
+    if (!pickedSpotifyTrackId) {
+      setError(t('campaigns.new.errorSpotifyRequired'));
+      return;
+    }
     if (!trackTitle.trim() || !artistName.trim()) {
       setError(t('campaigns.new.errorRequired'));
+      return;
+    }
+    if (!pendingTrackFile) {
+      setError(t('campaigns.new.errorTrackRequired'));
       return;
     }
     setError(null);
@@ -771,30 +770,31 @@ export default function NewCampaignScreen() {
     animateProgressTo(28, 600);
 
     try {
-      const { data } = await createCampaign({ variables: { trackTitle, artistName } });
+      const { data } = await createCampaign({
+        variables: {
+          trackTitle,
+          artistName,
+          spotifyTrackId: pickedSpotifyTrackId ?? undefined,
+        },
+      });
       const id = data.createCampaign.id;
       setCampaignId(id);
 
-      if (pendingTrackFile) {
-        setUploadStepIdx(1);
-        animateProgressTo(72, pendingTrackFile.size > 5_000_000 ? 3000 : 1500);
-        await uploadPendingTrack(id, pendingTrackFile);
-      }
+      setUploadStepIdx(1);
+      animateProgressTo(55, pendingTrackFile.size > 5_000_000 ? 3000 : 1500);
+      const s3Key = await uploadPendingTrack(id, pendingTrackFile);
 
       setUploadStepIdx(2);
-      animateProgressTo(92, 800);
-      loadHooks({ variables: { campaignId: id } });
-      setMoodsLoading(true);
-      loadMoodSuggestion({ variables: { campaignId: id } });
+      animateProgressTo(88, 2800);
+      await prepareVisualsAndHooksForEditor(id, s3Key);
 
-      await new Promise((r) => setTimeout(r, 900));
       setUploadStepIdx(3);
       animateProgressTo(100, 400);
 
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 400));
       setUploadOverlay(false);
       clearProgressInterval();
-      setStep(2);
+      setStep(4);
     } catch (err: unknown) {
       setUploadOverlay(false);
       clearProgressInterval();
@@ -808,35 +808,6 @@ export default function NewCampaignScreen() {
         setError(t('campaigns.new.errorCreateFallback'));
       }
     }
-  }
-
-  // Step 2 → 3 : mood + video confirmed, go to hook picker
-  async function handleStep2Continue() {
-    if (!selectedMood || !campaignId) return;
-    setError(null);
-    await updateCampaign({
-      variables: {
-        id: campaignId,
-        mood: selectedMood,
-        ...(videoSource === 'own' && customVideoS3Key ? { customVideoS3Key } : {}),
-      },
-    });
-    setStep(3);
-  }
-
-  // Step 3 → 4 : hook confirmed, go to video editor
-  async function handleStep3Continue() {
-    if (!selectedHook || !campaignId) return;
-    setError(null);
-    await updateCampaign({
-      variables: {
-        id: campaignId,
-        hookStart: selectedHook.start,
-        hookEnd: selectedHook.end,
-        trackS3Key: trackS3Key || undefined,
-      },
-    });
-    setStep(4);
   }
 
   // Step 4 → 5 : editor confirmed, go to generate
@@ -856,13 +827,17 @@ export default function NewCampaignScreen() {
       }
     })();
 
-    const selectedVideoUrl = customVideoLocalUrl ?? selectedPreviewUrls[0] ?? null;
-    const apiPromise = generateAds({
+    // Save editor settings to campaign before generating
+    await updateCampaign({
       variables: {
-        campaignId,
-        selectedVideoUrl,
+        id: campaignId,
         editorSettings: {
           filterPreset: editorSettings.filterPreset,
+          brightness: editorSettings.brightness,
+          contrast: editorSettings.contrast,
+          saturation: editorSettings.saturation,
+          grain: editorSettings.grain,
+          motionPreset: editorSettings.motionPreset,
           text: editorSettings.text,
           fontFamily: editorSettings.fontFamily,
           fontSize: editorSettings.fontSize,
@@ -870,61 +845,20 @@ export default function NewCampaignScreen() {
           textBgColor: editorSettings.textBgColor,
           textBgOpacity: editorSettings.textBgOpacity,
           textPosition: editorSettings.textPosition,
-          fadeIn: editorSettings.fadeIn,
-          fadeOut: editorSettings.fadeOut,
         },
       },
-    });
+    }).catch(() => { /* non-blocking */ });
+
+    const apiPromise = generateAds({ variables: { campaignId } });
 
     await animationPromise;
 
     try {
       const { data } = await apiPromise;
-      setGeneratedAds(data?.generateAds?.generatedAds ?? []);
+      const generatedAd = data?.generateAds?.generatedAd;
+      setGeneratedAds(generatedAd ? [generatedAd] : [{ id: '1', visualStyle: 'default' }]);
     } catch {
-      setGeneratedAds([
-        { id: '1', visualStyle: 'Night Drive', textOverlay: 'Out now' },
-        { id: '2', visualStyle: 'Abstract Motion', textOverlay: 'Stream now' },
-        { id: '3', visualStyle: 'Vintage Footage', textOverlay: 'Listen now' },
-        { id: '4', visualStyle: 'Aesthetic City', textOverlay: 'New track' },
-      ]);
-    }
-  }
-
-  function handleMoodSelect(mood: string) {
-    setSelectedMood(mood);
-    setVideoPage(1);
-    setVideoSearchQuery('');
-    setVideoSearchActive(false);
-    const moodOption = displayMoods.find((m) => m.key === mood);
-    const keywords = moodOption?.videoKeywords ?? [];
-    setMoodVideoKeywords(keywords);
-    loadVideos({ variables: { mood, page: 1, ...(keywords.length ? { keywords } : {}) } });
-  }
-
-  function handleVideoSearch() {
-    const q = videoSearchQuery.trim();
-    if (!q) return;
-    setVideoSearchActive(true);
-    setVideoPage(1);
-    const keywords = q.split(',').map((s) => s.trim()).filter(Boolean);
-    loadVideos({ variables: { mood: selectedMood ?? 'indie', page: 1, keywords } });
-  }
-
-  function handleVideoClearSearch() {
-    setVideoSearchQuery('');
-    setVideoSearchActive(false);
-    setVideoPage(1);
-    loadVideos({ variables: { mood: selectedMood, page: 1, ...(moodVideoKeywords.length ? { keywords: moodVideoKeywords } : {}) } });
-  }
-
-  function handleVideoPageChange(newPage: number) {
-    setVideoPage(newPage);
-    if (videoSearchActive) {
-      const keywords = videoSearchQuery.split(',').map((s) => s.trim()).filter(Boolean);
-      loadVideos({ variables: { mood: selectedMood ?? 'indie', page: newPage, keywords } });
-    } else {
-      loadVideos({ variables: { mood: selectedMood, page: newPage, ...(moodVideoKeywords.length ? { keywords: moodVideoKeywords } : {}) } });
+      setGeneratedAds([{ id: '1', visualStyle: 'default' }]);
     }
   }
 
@@ -945,7 +879,6 @@ export default function NewCampaignScreen() {
   }
 
   function handleFinish() {
-    clearDraft();
     if (campaignId) {
       router.replace(`/(app)/campaigns/${campaignId}` as any);
     } else {
@@ -953,60 +886,323 @@ export default function NewCampaignScreen() {
     }
   }
 
-  return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.container}>
 
-      {/* ── DRAFT RESUME MODAL ── */}
-      <Modal visible={showDraftModal} transparent animationType="fade" onRequestClose={() => setShowDraftModal(false)}>
-        <TouchableWithoutFeedback onPress={() => setShowDraftModal(false)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg }}>
-            <TouchableWithoutFeedback>
-              <View style={{ backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing.xl, width: '100%', maxWidth: 400, gap: spacing.lg }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                  <View style={{ width: 44, height: 44, borderRadius: radius.full, backgroundColor: colors.primaryBg, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="bookmark-outline" size={22} color={colors.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary }}>
-                      Brouillon en cours
-                    </Text>
-                    <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 }}>
-                      {savedDraft?.trackTitle} — {savedDraft?.artistName}
-                    </Text>
-                  </View>
+  function renderAuxiliaryModals() {
+    return (
+      <>
+        {/* ── Step 1 upload overlay ── */}
+        <Modal visible={uploadOverlay} transparent animationType="fade">
+          <View style={{
+            flex: 1,
+            backgroundColor: 'rgba(8,8,14,0.92)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: spacing.xl,
+          }}>
+            <View style={{
+              width: '100%',
+              maxWidth: 420,
+              backgroundColor: colors.bgCard,
+              borderRadius: radius.xl,
+              borderWidth: 1,
+              borderColor: colors.border,
+              padding: spacing.xl,
+              gap: spacing.lg,
+            }}>
+              {/* Icon + title */}
+              <View style={{ alignItems: 'center', gap: spacing.sm }}>
+                <View style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: radius.full,
+                  backgroundColor: colors.primaryBg,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <Ionicons
+                    name={
+                      uploadStepIdx === 3
+                        ? 'checkmark'
+                        : uploadStepIdx === 1
+                          ? 'cloud-upload-outline'
+                          : uploadStepIdx === 2
+                            ? 'film-outline'
+                            : 'add-circle-outline'
+                    }
+                    size={26}
+                    color={uploadStepIdx === 3 ? colors.success : colors.primary}
+                  />
                 </View>
-
-                <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20 }}>
-                  Tu as une campagne non terminée. Veux-tu reprendre là où tu t'es arrêté·e ?
+                <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary, textAlign: 'center' }}>
+                  {uploadStepIdx === 0 && t('campaigns.new.uploadOverlayStep0')}
+                  {uploadStepIdx === 1 && t('campaigns.new.uploadOverlayStep1')}
+                  {uploadStepIdx === 2 && t('campaigns.new.uploadOverlayStep2')}
+                  {uploadStepIdx === 3 && t('campaigns.new.uploadOverlayStep3')}
                 </Text>
+                <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'center' }}>
+                  {uploadStepIdx === 0 && t('campaigns.new.uploadOverlayStep0Sub')}
+                  {uploadStepIdx === 1 && (pendingTrackFile ? pendingTrackFile.name : '')}
+                  {uploadStepIdx === 2 && t('campaigns.new.uploadOverlayStep2Sub')}
+                  {uploadStepIdx === 3 && t('campaigns.new.uploadOverlayStep3Sub')}
+                </Text>
+              </View>
 
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <TouchableOpacity
-                    style={{ flex: 1, paddingVertical: spacing.sm + 2, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}
-                    onPress={() => { clearDraft(); setShowDraftModal(false); }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={{ fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textSecondary }}>
-                      Recommencer
+              {/* Progress bar */}
+              <View style={{ gap: spacing.xs }}>
+                <View style={{
+                  height: 6,
+                  backgroundColor: colors.bgElevated,
+                  borderRadius: radius.full,
+                  overflow: 'hidden',
+                }}>
+                  <View style={{
+                    height: '100%',
+                    width: `${uploadProgress}%` as any,
+                    backgroundColor: uploadStepIdx === 3 ? colors.success : colors.primary,
+                    borderRadius: radius.full,
+                  }} />
+                </View>
+                <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' }}>
+                  {Math.round(uploadProgress)}%
+                </Text>
+              </View>
+
+              {/* Step dots */}
+              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: spacing.sm }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <View key={i} style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: i <= uploadStepIdx
+                      ? (uploadStepIdx === 3 ? colors.success : colors.primary)
+                      : colors.bgElevated,
+                  }} />
+                ))}
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* ── Verification required modal ── */}
+        <Modal visible={showVerifModal} transparent animationType="fade" onRequestClose={handleCloseVerifModal}>
+          <TouchableWithoutFeedback onPress={handleCloseVerifModal}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl }}>
+              <TouchableWithoutFeedback>
+                <View style={{
+                  backgroundColor: colors.bgCard,
+                  borderRadius: radius.lg,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  padding: spacing.xl,
+                  width: '100%',
+                  maxWidth: 400,
+                  gap: spacing.md,
+                }}>
+                  <Text style={{ fontSize: 32, textAlign: 'center' }}>✉️</Text>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary, textAlign: 'center' }}>
+                    {t('auth.verificationModal.title')}
+                  </Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 }}>
+                    {t('auth.verificationModal.body')}
+                  </Text>
+
+                  {resendSent && (
+                    <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.success, textAlign: 'center' }}>
+                      {t('auth.verificationModal.sent')}
                     </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={{ flex: 2, paddingVertical: spacing.sm + 2, borderRadius: radius.lg, backgroundColor: colors.primary, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: spacing.xs }}
-                    onPress={resumeDraft}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="play-circle-outline" size={16} color="#fff" />
-                    <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: '#fff' }}>
-                      Reprendre
+                  )}
+                  {resendError && (
+                    <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.error, textAlign: 'center' }}>
+                      {t('auth.verificationModal.error')}
                     </Text>
+                  )}
+
+                  {!resendSent && (
+                    <TouchableOpacity
+                      onPress={handleResendVerification}
+                      disabled={resending}
+                      style={{ backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs }}
+                    >
+                      {resending
+                        ? <ActivityIndicator size="small" color={colors.white} />
+                        : <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.white }}>{t('auth.verificationModal.resend')}</Text>
+                      }
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity onPress={handleCloseVerifModal} style={{ alignItems: 'center', paddingVertical: spacing.xs }}>
+                    <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted }}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
 
+        {/* ── Titres depuis le catalogue synchronisé (profil artiste lié) ── */}
+        <Modal visible={spotifyModalVisible} transparent animationType="fade" onRequestClose={closeSpotifyCatalogModal}>
+          <TouchableWithoutFeedback onPress={closeSpotifyCatalogModal}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg }}>
+              <TouchableWithoutFeedback>
+                <View
+                  style={{
+                    backgroundColor: colors.bgCard,
+                    borderRadius: radius.lg,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    width: '100%',
+                    maxWidth: 440,
+                    maxHeight: '85%' as any,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm }}>
+                    <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary, flex: 1 }} numberOfLines={2}>
+                      {t('campaigns.new.catalogModalTitle')}
+                    </Text>
+                    <TouchableOpacity onPress={closeSpotifyCatalogModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                      <Ionicons name="close" size={24} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.sm }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                      <TouchableOpacity
+                        onPress={() => handleRefreshCatalogInModal()}
+                        disabled={syncingCatalog}
+                        style={{
+                          paddingVertical: spacing.xs,
+                          paddingHorizontal: spacing.sm,
+                          borderRadius: radius.md,
+                          backgroundColor: colors.primaryBg,
+                        }}
+                      >
+                        {syncingCatalog ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                          <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.primary }}>
+                            {t('campaigns.new.catalogSyncBtn')}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                    <TextInput
+                      value={trackPickerFilter}
+                      onChangeText={setTrackPickerFilter}
+                      placeholder={t('campaigns.new.catalogFilterPlaceholder')}
+                      placeholderTextColor={colors.textMuted}
+                      style={{
+                        fontFamily: fonts.regular,
+                        fontSize: fontSize.md,
+                        color: colors.textPrimary,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        borderRadius: radius.md,
+                        paddingHorizontal: spacing.md,
+                        paddingVertical: spacing.sm,
+                      }}
+                    />
+                    {catalogQueryError ? (
+                      <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.error }}>
+                        {t('campaigns.new.spotifyLoadError')}
+                      </Text>
+                    ) : null}
+                    <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+                      {catalogTracksLoading && filteredCatalogTracks.length === 0 ? (
+                        <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
+                      ) : filteredCatalogTracks.length === 0 ? (
+                        <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted, paddingVertical: spacing.md }}>
+                          {t('campaigns.new.catalogEmptyStored')}
+                        </Text>
+                      ) : (
+                        filteredCatalogTracks.map(
+                          (tr: {
+                            id: string;
+                            spotifyTrackId: string;
+                            name: string;
+                            artistName: string;
+                            albumName: string;
+                            albumImageUrl?: string | null;
+                            durationMs: number;
+                          }) => (
+                            <TouchableOpacity
+                              key={tr.id}
+                              onPress={() => handlePickSpotifyCatalogTrack(tr)}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: spacing.md,
+                                paddingVertical: spacing.sm,
+                                borderBottomWidth: 1,
+                                borderBottomColor: colors.border,
+                              }}
+                            >
+                              {tr.albumImageUrl ? (
+                                <Image
+                                  source={{ uri: tr.albumImageUrl }}
+                                  style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: radius.sm,
+                                    backgroundColor: colors.primaryBg,
+                                  }}
+                                />
+                              ) : (
+                                <View
+                                  style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: radius.sm,
+                                    backgroundColor: colors.primaryBg,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                >
+                                  <Ionicons name="musical-note" size={18} color={colors.textMuted} />
+                                </View>
+                              )}
+                              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                                <Text
+                                  style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textPrimary }}
+                                  numberOfLines={2}
+                                >
+                                  {tr.name}
+                                </Text>
+                                <Text
+                                  style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted }}
+                                  numberOfLines={1}
+                                >
+                                  {tr.albumName} · {formatTrackDurationMs(tr.durationMs)}
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          )
+                        )
+                      )}
+                    </ScrollView>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+
+        <LinkSpotifyArtistModal
+          visible={artistLinkModalOpen}
+          onClose={() => setArtistLinkModalOpen(false)}
+          onSelectArtist={(a) => {
+            void handleArtistLinkedForCampaign(a).catch((e) => alert((e as Error).message));
+          }}
+          linking={linkingArtist}
+          colors={colors}
+        />
+      </>
+    );
+  }
+
+  const pageHeader = (
+    <View style={step === 4 ? styles.editorPageHeader : undefined}>
       {/* Header */}
       <View style={styles.topRow}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
@@ -1015,13 +1211,14 @@ export default function NewCampaignScreen() {
         <Text style={styles.pageTitle}>{t('campaigns.new.title')}</Text>
       </View>
 
-      {/* Step indicator */}
+      {/* Step indicator — séquence 1 → 4 → 5 → 6 */}
       <View style={styles.stepRow}>
         {STEP_LABELS.map((label, i) => {
-          const stepNum = (i + 1) as Step;
-          const isDone = step > stepNum;
+          const stepNum = WIZARD_STEPS[i];
+          const curIdx = WIZARD_STEPS.indexOf(step);
+          const isDone = curIdx > i;
           const isActive = step === stepNum;
-          const canNavigate = isDone && stepNum >= 2; // can go back to any completed step (except step 1 which requires a new upload)
+          const canNavigate = WIZARD_STEPS.indexOf(stepNum) < curIdx;
           return (
             <React.Fragment key={label}>
               {i > 0 && (
@@ -1038,7 +1235,7 @@ export default function NewCampaignScreen() {
                     <Ionicons name="checkmark" size={14} color={colors.white} />
                   ) : (
                     <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: isActive ? colors.white : colors.textMuted }}>
-                      {stepNum}
+                      {i + 1}
                     </Text>
                   )}
                 </View>
@@ -1052,26 +1249,177 @@ export default function NewCampaignScreen() {
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    </View>
+  );
+
+  const videoEditorStepEl = (
+    <VideoEditorStep
+      fullBleed
+      videoUrl={customVideoLocalUrl ?? selectedPreviewUrls[0] ?? ''}
+      settings={editorSettings}
+      onChange={setEditorSettings}
+    />
+  );
+
+  if (step === 4) {
+    const fabLabel = t('campaigns.new.continueBtn');
+
+    /** Bouton HTML natif : RN Web ne garantit pas `position:fixed` sur TouchableOpacity. */
+    const editorStep4FloatingWeb =
+      typeof document !== 'undefined'
+        ? createPortal(
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
+                  e.preventDefault();
+                  handleStep4Continue();
+                },
+                style: {
+                  position: 'fixed',
+                  right: spacing.lg,
+                  bottom: spacing.lg,
+                  zIndex: 2147483647,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '14px 22px',
+                  margin: 0,
+                  border: 'none',
+                  borderRadius: 9999,
+                  backgroundColor: colors.primary,
+                  color: colors.white,
+                  fontSize: fontSize.md,
+                  fontWeight: 600,
+                  fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif',
+                  cursor: 'pointer',
+                  boxShadow: '0 14px 44px -10px rgba(0,0,0,0.55), 0 6px 20px -6px rgba(0,0,0,0.35)',
+                  lineHeight: 1.25,
+                } satisfies React.CSSProperties,
+              },
+              fabLabel
+            ),
+            document.body
+          )
+        : null;
+
+    return (
+      <>
+        <View style={[styles.root, styles.editorStep4Root]}>
+          <View style={styles.editorStep4Body}>{videoEditorStepEl}</View>
+        </View>
+        {Platform.OS === 'web' ? editorStep4FloatingWeb : (
+          <View style={styles.editorStep4FabOverlay} pointerEvents="box-none">
+            <TouchableOpacity
+              style={[styles.editorStep4Fab, { backgroundColor: colors.primary }]}
+              onPress={handleStep4Continue}
+              activeOpacity={0.88}
+            >
+              <Text style={[styles.editorStep4FabLabel, { color: colors.white }]}>{fabLabel}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {renderAuxiliaryModals()}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <ScrollView style={styles.root} contentContainerStyle={styles.container}>
+        {pageHeader}
 
       {/* ── STEP 1: Upload ── */}
-      {step === 1 && (
+      {step === 1 && !editCampaignId && !spotifyArtistId && (
         <Card padding="lg">
           <View style={styles.stepCard}>
-            <Text style={styles.stepTitle}>{t('campaigns.new.uploadTitle')}</Text>
-            <Text style={styles.stepSubtitle}>{t('campaigns.new.uploadSubtitle')}</Text>
+            <Text style={styles.stepTitle}>{t('campaigns.new.artistRequiredTitle')}</Text>
+            <Text style={styles.stepSubtitle}>{t('campaigns.new.artistRequiredSubtitle')}</Text>
+            <Button
+              label={t('campaigns.new.artistRequiredBtn')}
+              onPress={() => setArtistLinkModalOpen(true)}
+              variant="secondary"
+              fullWidth
+            />
+          </View>
+        </Card>
+      )}
 
-            <Input
-              label={t('campaigns.new.trackTitleLabel')}
-              value={trackTitle}
-              onChangeText={setTrackTitle}
-              placeholder={t('campaigns.new.trackTitlePlaceholder')}
-            />
-            <Input
-              label={t('campaigns.new.artistNameLabel')}
-              value={artistName}
-              onChangeText={setArtistName}
-              placeholder={t('campaigns.new.artistNamePlaceholder')}
-            />
+      {step === 1 && (Boolean(editCampaignId) || Boolean(spotifyArtistId)) && (
+        <Card padding="lg">
+          <View style={styles.stepCard}>
+            <Text style={styles.stepTitle}>{t('campaigns.new.wizardTrackTitle')}</Text>
+            <Text style={styles.stepSubtitle}>{t('campaigns.new.wizardTrackSubtitle')}</Text>
+
+            <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              {t('campaigns.new.wizardStepPickTrack')}
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+              <Button
+                label={
+                  pickedSpotifyTrackId ? t('campaigns.new.spotifyChangeTrackBtn') : t('campaigns.new.spotifyCatalogBtn')
+                }
+                onPress={openSpotifyCatalogModal}
+                variant="secondary"
+                style={{ flex: 1, minWidth: 160 }}
+              />
+              <Button
+                label={t('campaigns.new.catalogSyncBtn')}
+                onPress={() => void handleRefreshCatalogInModal()}
+                variant="ghost"
+                loading={syncingCatalog}
+                style={{ minWidth: 120 }}
+              />
+            </View>
+            {pickedSpotifyTrackId && trackTitle ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.md,
+                  padding: spacing.md,
+                  borderRadius: radius.lg,
+                  backgroundColor: colors.bgElevated,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                {pickedSpotifyCoverUrl ? (
+                  <Image source={{ uri: pickedSpotifyCoverUrl }} style={{ width: 56, height: 56, borderRadius: radius.md }} />
+                ) : (
+                  <View
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: radius.md,
+                      backgroundColor: colors.primaryBg,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Ionicons name="musical-note" size={24} color={colors.textMuted} />
+                  </View>
+                )}
+                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.textPrimary }} numberOfLines={2}>
+                    {trackTitle}
+                  </Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary }} numberOfLines={1}>
+                    {artistName}
+                  </Text>
+                </View>
+                <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+              </View>
+            ) : (
+              <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted }}>
+                {t('campaigns.new.wizardPickTrackHint')}
+              </Text>
+            )}
+
+            <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: spacing.sm }}>
+              {t('campaigns.new.wizardStepUploadAudio')}
+            </Text>
 
             {pendingTrackFile ? (
               <View style={styles.uploadedRow}>
@@ -1101,349 +1449,6 @@ export default function NewCampaignScreen() {
               />
             </View>
           </View>
-        </Card>
-      )}
-
-      {/* ── STEP 2: Mood & Visuals ── */}
-      {step === 2 && (
-        <Card padding="lg">
-          <View style={styles.stepCard}>
-            <Text style={styles.stepTitle}>{t('campaigns.new.moodTitle')}</Text>
-            <Text style={styles.stepSubtitle}>{t('campaigns.new.moodSubtitle')}</Text>
-
-            {moodsLoading ? (
-              <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={styles.muted}>{t('campaigns.new.moodAnalyzing')}</Text>
-              </View>
-            ) : isMobile ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.moodGridMobile}
-              >
-                {displayMoods.map(({ key, label, icon }) => {
-                  const isSelected = selectedMood === key;
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      style={[styles.moodChip, isSelected ? styles.moodChipSelected : styles.moodChipIdle]}
-                      onPress={() => handleMoodSelect(key)}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name={icon as any} size={16} color={isSelected ? colors.primary : colors.textSecondary} />
-                      <Text style={[styles.moodChipLabel, isSelected ? styles.moodChipLabelSelected : styles.moodChipLabelIdle]}>
-                        {label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            ) : (
-              <View style={styles.moodGrid}>
-                {displayMoods.map(({ key, label, icon }) => {
-                  const isSelected = selectedMood === key;
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      style={[styles.moodChip, isSelected ? styles.moodChipSelected : styles.moodChipIdle]}
-                      onPress={() => handleMoodSelect(key)}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name={icon as any} size={16} color={isSelected ? colors.primary : colors.textSecondary} />
-                      <Text style={[styles.moodChipLabel, isSelected ? styles.moodChipLabelSelected : styles.moodChipLabelIdle]}>
-                        {label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-
-            {aiSuggestedMood && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: -spacing.xs }}>
-                <Ionicons name="sparkles" size={13} color={colors.primary} />
-                <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.primary }}>
-                  {t('campaigns.new.moodAiSuggested')}
-                </Text>
-              </View>
-            )}
-
-            {/* Video source tab switcher */}
-            <View style={styles.videoTabRow}>
-              {(['stock', 'own'] as const).map((src) => {
-                const isActive = videoSource === src;
-                const icon = src === 'stock' ? 'images-outline' : 'cloud-upload-outline';
-                const label = src === 'stock' ? t('campaigns.new.videoSourceStock') : t('campaigns.new.videoSourceOwn');
-                return (
-                  <TouchableOpacity
-                    key={src}
-                    style={[styles.videoTab, isActive && styles.videoTabActive]}
-                    onPress={() => setVideoSource(src)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name={icon} size={15} color={isActive ? colors.primary : colors.textMuted} />
-                    <Text style={[styles.videoTabLabel, isActive ? styles.videoTabLabelActive : styles.videoTabLabelIdle]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Stock videos tab */}
-            {videoSource === 'stock' && selectedMood && (
-              <>
-                <Text style={styles.sectionLabel}>{t('campaigns.new.videosTitle')}</Text>
-
-                {/* Search bar */}
-                <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
-                  <View style={{
-                    flex: 1,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: colors.bgElevated,
-                    borderRadius: radius.lg,
-                    borderWidth: 1,
-                    borderColor: videoSearchActive ? colors.primary : colors.border,
-                    paddingHorizontal: spacing.md,
-                    gap: spacing.sm,
-                    height: 40,
-                  }}>
-                    <Ionicons name="search-outline" size={16} color={colors.textMuted} />
-                    <TextInput
-                      value={videoSearchQuery}
-                      onChangeText={setVideoSearchQuery}
-                      onSubmitEditing={handleVideoSearch}
-                      placeholder={t('campaigns.new.videoSearchPlaceholder')}
-                      placeholderTextColor={colors.textMuted}
-                      returnKeyType="search"
-                      style={{
-                        flex: 1,
-                        fontFamily: fonts.regular,
-                        fontSize: fontSize.sm,
-                        color: colors.textPrimary,
-                        outlineStyle: 'none',
-                      } as any}
-                    />
-                    {videoSearchQuery.length > 0 && (
-                      <TouchableOpacity onPress={handleVideoClearSearch} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name="close-circle" size={16} color={colors.textMuted} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  <TouchableOpacity
-                    onPress={handleVideoSearch}
-                    disabled={!videoSearchQuery.trim() || videosLoading}
-                    style={{
-                      height: 40,
-                      paddingHorizontal: spacing.md,
-                      backgroundColor: colors.primary,
-                      borderRadius: radius.lg,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      opacity: !videoSearchQuery.trim() ? 0.4 : 1,
-                    }}
-                  >
-                    <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.white }}>
-                      {t('campaigns.new.videoSearchBtn')}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {videosLoading ? (
-                  <VideoSkeletonGrid isMobile={isMobile} colors={colors} />
-                ) : videos.length === 0 ? (
-                  <Text style={styles.muted}>{t('campaigns.new.videosNone')}</Text>
-                ) : videoGrid}
-
-                {/* Pagination */}
-                {totalVideoPages > 1 && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.xs }}>
-                    <TouchableOpacity
-                      onPress={() => handleVideoPageChange(videoPage - 1)}
-                      disabled={videoPage <= 1 || videosLoading}
-                      style={{
-                        width: 34, height: 34, borderRadius: radius.md,
-                        backgroundColor: colors.bgElevated,
-                        borderWidth: 1, borderColor: colors.border,
-                        alignItems: 'center', justifyContent: 'center',
-                        opacity: videoPage <= 1 ? 0.4 : 1,
-                      }}
-                    >
-                      <Ionicons name="chevron-back" size={16} color={colors.textSecondary} />
-                    </TouchableOpacity>
-
-                    {Array.from({ length: Math.min(totalVideoPages, 5) }, (_, i) => {
-                      const startPage = Math.max(1, Math.min(videoPage - 2, totalVideoPages - 4));
-                      const p = startPage + i;
-                      const isActive = p === videoPage;
-                      return (
-                        <TouchableOpacity
-                          key={p}
-                          onPress={() => handleVideoPageChange(p)}
-                          disabled={videosLoading}
-                          style={{
-                            width: 34, height: 34, borderRadius: radius.md,
-                            backgroundColor: isActive ? colors.primary : colors.bgElevated,
-                            borderWidth: 1, borderColor: isActive ? colors.primary : colors.border,
-                            alignItems: 'center', justifyContent: 'center',
-                          }}
-                        >
-                          <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: isActive ? colors.white : colors.textSecondary }}>
-                            {p}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-
-                    <TouchableOpacity
-                      onPress={() => handleVideoPageChange(videoPage + 1)}
-                      disabled={videoPage >= totalVideoPages || videosLoading}
-                      style={{
-                        width: 34, height: 34, borderRadius: radius.md,
-                        backgroundColor: colors.bgElevated,
-                        borderWidth: 1, borderColor: colors.border,
-                        alignItems: 'center', justifyContent: 'center',
-                        opacity: videoPage >= totalVideoPages ? 0.4 : 1,
-                      }}
-                    >
-                      <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </>
-            )}
-
-            {/* Own video tab */}
-            {videoSource === 'own' && (
-              <>
-                <Text style={styles.sectionLabel}>{t('campaigns.new.videoSourceOwn').toUpperCase()}</Text>
-
-                {customVideoUploaded && customVideoLocalUrl ? (
-                  <View style={{ gap: spacing.sm }}>
-                    {/* Video player */}
-                    <View style={{
-                      width: '100%',
-                      maxWidth: 220,
-                      alignSelf: 'center',
-                      borderRadius: radius.xl,
-                      overflow: 'hidden',
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      backgroundColor: colors.black,
-                    }}>
-                      <View style={{ aspectRatio: 9 / 16 }}>
-                        {Platform.OS === 'web' && React.createElement('video', {
-                          src: customVideoLocalUrl,
-                          controls: true,
-                          loop: true,
-                          playsInline: true,
-                          style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
-                        })}
-                      </View>
-                    </View>
-
-                    {/* File name + replace button */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.bgElevated, borderRadius: radius.lg, padding: spacing.md }}>
-                      <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-                      <Text style={[styles.uploadedText, { flex: 1 }]} numberOfLines={1}>{customVideoFileName}</Text>
-                      <TouchableOpacity
-                        onPress={() => { setCustomVideoUploaded(false); setCustomVideoS3Key(''); setCustomVideoLocalUrl(null); setCustomVideoFileName(''); }}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                      >
-                        <Ionicons name="refresh-outline" size={15} color={colors.textMuted} />
-                        <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted }}>{t('campaigns.new.uploadVideoReplace')}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.uploadZone, videoUploading ? styles.uploadZoneActive : styles.uploadZoneIdle]}
-                    onPress={handleUploadVideo}
-                    activeOpacity={0.7}
-                    disabled={videoUploading || !campaignId}
-                  >
-                    {videoUploading ? (
-                      <ActivityIndicator color={colors.primary} />
-                    ) : (
-                      <Ionicons name="videocam-outline" size={32} color={colors.textMuted} />
-                    )}
-                    <Text style={styles.uploadZoneLabel}>
-                      {videoUploading ? t('campaigns.new.uploadVideoUploading') : t('campaigns.new.uploadVideoLabel')}
-                    </Text>
-                    <Text style={styles.uploadZoneHint}>{t('campaigns.new.uploadVideoHint')}</Text>
-                  </TouchableOpacity>
-                )}
-
-                <Text style={[styles.muted, { fontSize: fontSize.xs, textAlign: 'center', lineHeight: 18 }]}>
-                  {t('campaigns.new.uploadVideoSubtitle')}
-                </Text>
-              </>
-            )}
-
-            <View style={styles.actions}>
-              <Button label={t('common.back')} variant="secondary" onPress={() => setStep(1)} />
-              <Button
-                label={t('campaigns.new.continueBtn')}
-                onPress={handleStep2Continue}
-                disabled={!selectedMood || (videoSource === 'own' && !customVideoUploaded && !videoUploading)}
-                loading={videoUploading}
-              />
-            </View>
-          </View>
-        </Card>
-      )}
-
-      {/* ── STEP 3: Hook — Waveform Timeline ── */}
-      {step === 3 && (
-        <Card padding="lg">
-          <View style={styles.stepCard}>
-            <Text style={styles.stepTitle}>{t('campaigns.new.hookTitle')}</Text>
-            <Text style={styles.stepSubtitle}>{t('campaigns.new.hookSubtitle')}</Text>
-
-            <WaveformHookPicker
-              audioFile={pendingTrackFile}
-              suggestions={
-                hookSuggestions.length > 0
-                  ? hookSuggestions
-                  : [
-                      { start: 25, end: 40, label: 'chorus', energy: 'chorus' as const },
-                      { start: 60, end: 75, label: 'drop', energy: 'high' as const },
-                    ]
-              }
-              selected={selectedHook}
-              onSelect={setSelectedHook}
-              loading={hooksLoading}
-              previewVideoUrl={
-                customVideoLocalUrl ??
-                selectedPreviewUrls[0] ??
-                (videos.length > 0 ? videos[0].previewUrl : undefined)
-              }
-            />
-
-            <View style={styles.actions}>
-              <Button label={t('common.back')} variant="secondary" onPress={() => setStep(2)} />
-              <Button
-                label={t('campaigns.new.continueBtn')}
-                onPress={handleStep3Continue}
-                disabled={!selectedHook}
-              />
-            </View>
-          </View>
-        </Card>
-      )}
-
-      {/* ── STEP 4: Video Editor ── */}
-      {step === 4 && (
-        <Card padding="lg">
-          <VideoEditorStep
-            videoUrl={customVideoLocalUrl ?? selectedPreviewUrls[0] ?? ''}
-            settings={editorSettings}
-            onChange={setEditorSettings}
-            onBack={() => setStep(3)}
-            onContinue={handleStep4Continue}
-          />
         </Card>
       )}
 
@@ -1486,36 +1491,23 @@ export default function NewCampaignScreen() {
               <>
                 <Text style={styles.successText}>{t('campaigns.new.generateDone')}</Text>
                 <View style={styles.adGrid}>
-                  {generatedAds.map((ad, i) => (
-                    <View key={ad.id} style={styles.adCard}>
-                      <View style={styles.adThumb}>
-                        {(ad.videoUrl || selectedPreviewUrls[0] || customVideoLocalUrl)
-                          ? React.createElement('video', {
-                              src: ad.videoUrl || selectedPreviewUrls[0] || customVideoLocalUrl,
-                              muted: true,
-                              playsInline: true,
-                              loop: true,
-                              autoPlay: true,
-                              preload: 'metadata',
-                              style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' },
-                            })
-                          : <Ionicons name="film-outline" size={32} color={colors.primary} />
-                        }
-                      </View>
-                      <View style={styles.adCardBody}>
-                        <Text style={styles.adLabel}>Ton ad</Text>
-                        <Text style={styles.adStyle}>{ad.visualStyle}</Text>
-                        {ad.textOverlay ? (
-                          <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted, fontStyle: 'italic' }}>
-                            "{ad.textOverlay}"
-                          </Text>
-                        ) : null}
-                        {!ad.videoUrl && (
-                          <Text style={{ fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
-                            Aperçu source — rendu ffmpeg non disponible
-                          </Text>
-                        )}
-                      </View>
+                  {generatedAds.map((ad) => (
+                    <View key={ad.id} style={styles.adVideoBlock}>
+                      {(ad.videoUrl || selectedPreviewUrls[0] || customVideoLocalUrl)
+                        ? React.createElement('video', {
+                            src: ad.videoUrl || selectedPreviewUrls[0] || customVideoLocalUrl,
+                            playsInline: true,
+                            loop: true,
+                            controls: true,
+                            preload: 'metadata',
+                            style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: radius.xl },
+                          })
+                        : (
+                          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="film-outline" size={32} color={colors.primary} />
+                          </View>
+                        )
+                      }
                     </View>
                   ))}
                 </View>
@@ -1591,238 +1583,8 @@ export default function NewCampaignScreen() {
           </View>
         </Card>
       )}
-      {/* ── Video preview modal ── */}
-      <Modal visible={!!previewVideo} transparent animationType="fade" onRequestClose={() => setPreviewVideo(null)}>
-        <TouchableWithoutFeedback onPress={() => setPreviewVideo(null)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg }}>
-            <TouchableWithoutFeedback>
-              <View style={{
-                width: '100%',
-                maxWidth: 380,
-                backgroundColor: colors.bgCard,
-                borderRadius: radius.xl,
-                borderWidth: 1,
-                borderColor: colors.border,
-                overflow: 'hidden',
-              }}>
-                {/* Video player */}
-                <View style={{ width: '100%', aspectRatio: 9 / 16, backgroundColor: colors.black }}>
-                  {previewVideo && Platform.OS === 'web' && (
-                    // @ts-ignore – createElement renders a native <video> tag on React Native Web
-                    React.createElement('video', {
-                      src: previewVideo.previewUrl,
-                      autoPlay: true,
-                      controls: true,
-                      loop: true,
-                      playsInline: true,
-                      muted: true,
-                      style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
-                    })
-                  )}
-                </View>
-
-                {/* Footer */}
-                <View style={{ padding: spacing.md, gap: spacing.sm }}>
-                  <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textPrimary }} numberOfLines={1}>
-                    {previewVideo?.photographer}
-                  </Text>
-
-                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                    <TouchableOpacity
-                      style={{ flex: 1, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}
-                      onPress={() => setPreviewVideo(null)}
-                    >
-                      <Text style={{ fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textSecondary }}>{t('common.cancel')}</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={{
-                        flex: 2,
-                        paddingVertical: spacing.sm,
-                        borderRadius: radius.md,
-                        alignItems: 'center',
-                        flexDirection: 'row',
-                        justifyContent: 'center',
-                        gap: spacing.xs,
-                        backgroundColor: previewVideo && selectedVideoUrls.includes(previewVideo.url)
-                          ? colors.bgElevated
-                          : colors.primary,
-                        borderWidth: previewVideo && selectedVideoUrls.includes(previewVideo.url) ? 1 : 0,
-                        borderColor: colors.border,
-                      }}
-                      onPress={() => {
-                        if (!previewVideo) return;
-                        const isSelected = selectedVideoUrls.includes(previewVideo.url);
-                        // Single-select: replace previous selection
-                        setSelectedVideoUrls(isSelected ? [] : [previewVideo.url]);
-                        setSelectedPreviewUrls(isSelected ? [] : [previewVideo.previewUrl]);
-                        setPreviewVideo(null);
-                      }}
-                    >
-                      <Ionicons
-                        name={previewVideo && selectedVideoUrls.includes(previewVideo.url) ? 'close-circle-outline' : 'checkmark-circle-outline'}
-                        size={16}
-                        color={previewVideo && selectedVideoUrls.includes(previewVideo.url) ? colors.textSecondary : colors.white}
-                      />
-                      <Text style={{
-                        fontFamily: fonts.semiBold,
-                        fontSize: fontSize.sm,
-                        color: previewVideo && selectedVideoUrls.includes(previewVideo.url) ? colors.textSecondary : colors.white,
-                      }}>
-                        {previewVideo && selectedVideoUrls.includes(previewVideo.url)
-                          ? t('campaigns.new.videoDeselect')
-                          : t('campaigns.new.videoSelect')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* ── Step 1 upload overlay ── */}
-      <Modal visible={uploadOverlay} transparent animationType="fade">
-        <View style={{
-          flex: 1,
-          backgroundColor: 'rgba(8,8,14,0.92)',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: spacing.xl,
-        }}>
-          <View style={{
-            width: '100%',
-            maxWidth: 420,
-            backgroundColor: colors.bgCard,
-            borderRadius: radius.xl,
-            borderWidth: 1,
-            borderColor: colors.border,
-            padding: spacing.xl,
-            gap: spacing.lg,
-          }}>
-            {/* Icon + title */}
-            <View style={{ alignItems: 'center', gap: spacing.sm }}>
-              <View style={{
-                width: 56,
-                height: 56,
-                borderRadius: radius.full,
-                backgroundColor: colors.primaryBg,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <Ionicons
-                  name={uploadStepIdx === 3 ? 'checkmark' : uploadStepIdx === 1 ? 'cloud-upload-outline' : uploadStepIdx === 2 ? 'musical-notes-outline' : 'add-circle-outline'}
-                  size={26}
-                  color={uploadStepIdx === 3 ? colors.success : colors.primary}
-                />
-              </View>
-              <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary, textAlign: 'center' }}>
-                {uploadStepIdx === 0 && t('campaigns.new.uploadOverlayStep0')}
-                {uploadStepIdx === 1 && t('campaigns.new.uploadOverlayStep1')}
-                {uploadStepIdx === 2 && t('campaigns.new.uploadOverlayStep2')}
-                {uploadStepIdx === 3 && t('campaigns.new.uploadOverlayStep3')}
-              </Text>
-              <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'center' }}>
-                {uploadStepIdx === 0 && t('campaigns.new.uploadOverlayStep0Sub')}
-                {uploadStepIdx === 1 && (pendingTrackFile ? pendingTrackFile.name : '')}
-                {uploadStepIdx === 2 && t('campaigns.new.uploadOverlayStep2Sub')}
-                {uploadStepIdx === 3 && t('campaigns.new.uploadOverlayStep3Sub')}
-              </Text>
-            </View>
-
-            {/* Progress bar */}
-            <View style={{ gap: spacing.xs }}>
-              <View style={{
-                height: 6,
-                backgroundColor: colors.bgElevated,
-                borderRadius: radius.full,
-                overflow: 'hidden',
-              }}>
-                <View style={{
-                  height: '100%',
-                  width: `${uploadProgress}%` as any,
-                  backgroundColor: uploadStepIdx === 3 ? colors.success : colors.primary,
-                  borderRadius: radius.full,
-                }} />
-              </View>
-              <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'right' }}>
-                {Math.round(uploadProgress)}%
-              </Text>
-            </View>
-
-            {/* Step dots */}
-            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: spacing.sm }}>
-              {[0, 1, 2, 3].map((i) => (
-                <View key={i} style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: i <= uploadStepIdx
-                    ? (uploadStepIdx === 3 ? colors.success : colors.primary)
-                    : colors.bgElevated,
-                }} />
-              ))}
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Verification required modal ── */}
-      <Modal visible={showVerifModal} transparent animationType="fade" onRequestClose={handleCloseVerifModal}>
-        <TouchableWithoutFeedback onPress={handleCloseVerifModal}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl }}>
-            <TouchableWithoutFeedback>
-              <View style={{
-                backgroundColor: colors.bgCard,
-                borderRadius: radius.lg,
-                borderWidth: 1,
-                borderColor: colors.border,
-                padding: spacing.xl,
-                width: '100%',
-                maxWidth: 400,
-                gap: spacing.md,
-              }}>
-                <Text style={{ fontSize: 32, textAlign: 'center' }}>✉️</Text>
-                <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary, textAlign: 'center' }}>
-                  {t('auth.verificationModal.title')}
-                </Text>
-                <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 }}>
-                  {t('auth.verificationModal.body')}
-                </Text>
-
-                {resendSent && (
-                  <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.success, textAlign: 'center' }}>
-                    {t('auth.verificationModal.sent')}
-                  </Text>
-                )}
-                {resendError && (
-                  <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.error, textAlign: 'center' }}>
-                    {t('auth.verificationModal.error')}
-                  </Text>
-                )}
-
-                {!resendSent && (
-                  <TouchableOpacity
-                    onPress={handleResendVerification}
-                    disabled={resending}
-                    style={{ backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs }}
-                  >
-                    {resending
-                      ? <ActivityIndicator size="small" color={colors.white} />
-                      : <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.white }}>{t('auth.verificationModal.resend')}</Text>
-                    }
-                  </TouchableOpacity>
-                )}
-
-                <TouchableOpacity onPress={handleCloseVerifModal} style={{ alignItems: 'center', paddingVertical: spacing.xs }}>
-                  <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted }}>{t('common.cancel')}</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-    </ScrollView>
+      </ScrollView>
+      {renderAuxiliaryModals()}
+    </>
   );
 }

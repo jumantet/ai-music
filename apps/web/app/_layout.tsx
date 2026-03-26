@@ -24,10 +24,10 @@ function RootGuard() {
 
   useEffect(() => {
     if (isLoading) return;
-    const inAuthGroup = segments[0] === '(auth)';
-    const inEpkGroup = segments[0] === 'epk';
-    const inVerifyPage = segments[0] === 'verify';
-
+    const seg0 = segments[0] as string | undefined;
+    const inAuthGroup = seg0 === '(auth)';
+    const inEpkGroup = seg0 === 'epk';
+    const inVerifyPage = seg0 === 'verify';
     if (!user && !inAuthGroup && !inEpkGroup && !inVerifyPage) {
       router.replace('/(auth)/login');
     } else if (user && inAuthGroup) {

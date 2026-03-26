@@ -16,7 +16,7 @@ const NAV_ITEMS = [
     activeIcon: "grid" as const,
   },
   {
-    key: "sidebar.campaigns",
+    key: "sidebar.videos",
     path: "/campaigns",
     href: "/(app)/campaigns",
     icon: "film-outline" as const,

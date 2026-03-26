@@ -25,7 +25,7 @@ const NAV_ITEMS_CONFIG = [
     activeIcon: "grid",
   },
   {
-    key: "sidebar.campaigns",
+    key: "sidebar.videos",
     path: "/campaigns",
     href: "/(app)/campaigns",
     icon: "film-outline",

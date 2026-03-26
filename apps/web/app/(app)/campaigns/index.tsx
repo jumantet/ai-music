@@ -143,15 +143,8 @@ function statusLabel(status: string, t: (k: string) => string): string {
   return status;
 }
 
-function moodIcon(mood?: string): keyof typeof Ionicons.glyphMap {
-  switch (mood) {
-    case 'night_drive': return 'moon-outline';
-    case 'psychedelic': return 'color-palette-outline';
-    case 'vintage': return 'camera-outline';
-    case 'urban': return 'business-outline';
-    case 'indie': return 'musical-note-outline';
-    default: return 'film-outline';
-  }
+function campaignIcon(hasAd: boolean): keyof typeof Ionicons.glyphMap {
+  return hasAd ? 'film-outline' : 'musical-note-outline';
 }
 
 function CampaignCard({ campaign, colors, isMobile }: { campaign: Campaign; colors: ColorPalette; isMobile: boolean }) {
@@ -164,16 +157,16 @@ function CampaignCard({ campaign, colors, isMobile }: { campaign: Campaign; colo
         <Card padding="md">
           <View style={styles.cardInner}>
             <View style={styles.cardThumb}>
-              <Ionicons name={moodIcon(campaign.mood)} size={32} color={colors.primary} />
+              <Ionicons name={campaignIcon(!!campaign.generatedAd)} size={32} color={colors.primary} />
             </View>
             <Text style={styles.cardTrackTitle} numberOfLines={1}>{campaign.trackTitle}</Text>
             <Text style={styles.cardArtist} numberOfLines={1}>{campaign.artistName}</Text>
             <View style={styles.cardMeta}>
               <View style={styles.cardBadges}>
                 <Badge label={statusLabel(campaign.status, t)} variant={statusVariant(campaign.status)} />
-                {campaign.generatedAds?.length > 0 && (
+                {campaign.generatedAd && (
                   <Badge
-                    label={t('campaigns.adsCount', { count: campaign.generatedAds.length })}
+                    label={t('campaigns.adsCount', { count: 1 })}
                     variant="default"
                   />
                 )}

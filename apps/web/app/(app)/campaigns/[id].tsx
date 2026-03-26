@@ -38,7 +38,7 @@ function AdVideoThumb({ videoUrl, fallback }: { videoUrl: string; fallback: Reac
     onError: () => setErrored(true),
     style: {
       width: '100%',
-      height: 160,
+      height: '100%',
       objectFit: 'cover',
       display: 'block',
       pointerEvents: 'none',
@@ -112,35 +112,19 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
       flexWrap: 'wrap',
       gap: spacing.md,
     },
-    adCard: {
+    adVideoBlock: {
       width: isMobile ? '100%' : ('47%' as any),
       borderRadius: radius.xl,
       overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.bgElevated,
     },
     adThumb: {
-      height: 160,
+      aspectRatio: 16 / 9,
       backgroundColor: colors.primaryBg,
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
     },
-    adThumbVideo: {
-      height: 160,
-      width: '100%',
-    },
-    adBody: { padding: spacing.md, gap: spacing.xs },
-    adLabel: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.textPrimary },
-    adStyle: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted },
-    adOverlay: {
-      fontFamily: fonts.regular,
-      fontSize: fontSize.xs,
-      color: colors.textSecondary,
-      fontStyle: 'italic',
-    },
-    adActions: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.xs },
+    adActions: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.sm },
 
     // Campaign config
     campaignSection: { gap: spacing.md },
@@ -236,7 +220,6 @@ export default function CampaignDetailScreen() {
   const [metaDuration, setMetaDuration] = useState('7');
   const [metaAudience, setMetaAudience] = useState('');
   const [metaMessage, setMetaMessage] = useState('');
-  const [selectedAdId, setSelectedAdId] = useState<string | null>(null);
   const [launched, setLaunched] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
 
@@ -247,7 +230,7 @@ export default function CampaignDetailScreen() {
   const [launchMetaAd, { loading: launching }] = useMutation(LAUNCH_META_AD_MUTATION);
 
   const campaign: Campaign | undefined = data?.campaign;
-  const ads: GeneratedAd[] = campaign?.generatedAds ?? [];
+  const ad: GeneratedAd | null = campaign?.generatedAd ?? null;
   const metaPages = pagesData?.metaPages ?? [];
 
   function handleDelete() {
@@ -269,7 +252,7 @@ export default function CampaignDetailScreen() {
   }
 
   async function handleLaunchMeta() {
-    if (!selectedAdId) return;
+    if (!ad) return;
     const page = metaPages[0];
     if (!page) return;
     setLaunchError(null);
@@ -277,7 +260,7 @@ export default function CampaignDetailScreen() {
       await launchMetaAd({
         variables: {
           campaignId: id,
-          adId: selectedAdId,
+          adId: ad.id,
           pageId: page.id,
           instagramActorId: page.instagramActorId,
           campaignName: `${campaign?.trackTitle} — ${campaign?.artistName}`,
@@ -344,7 +327,7 @@ export default function CampaignDetailScreen() {
       {/* ── ADS TAB ── */}
       {activeTab === 'ads' && (
         <>
-          {ads.length === 0 ? (
+          {!ad ? (
             <View style={styles.emptyInner}>
               <View style={styles.emptyIconBox}>
                 <Ionicons name="film-outline" size={28} color={colors.primary} />
@@ -358,54 +341,37 @@ export default function CampaignDetailScreen() {
             </View>
           ) : (
             <View style={styles.adGrid}>
-              {ads.map((ad, i) => (
-                <View key={ad.id} style={[styles.adCard, selectedAdId === ad.id && { borderColor: colors.primary }]}>
-                  <TouchableOpacity onPress={() => setSelectedAdId(selectedAdId === ad.id ? null : ad.id)} activeOpacity={0.9}>
-                    <View style={styles.adThumb}>
-                      {ad.videoUrl ? (
-                        <AdVideoThumb
-                          videoUrl={ad.videoUrl}
-                          fallback={<Ionicons name="film-outline" size={36} color={colors.primary} />}
-                        />
-                      ) : (
-                        <Ionicons name="film-outline" size={36} color={colors.primary} />
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                  <View style={styles.adBody}>
-                    <Text style={styles.adLabel}>{t('campaigns.new.adVariant', { n: i + 1 })}</Text>
-                    <Text style={styles.adStyle}>{ad.visualStyle}</Text>
-                    {ad.textOverlay ? <Text style={styles.adOverlay}>"{ad.textOverlay}"</Text> : null}
-                    <View style={styles.adActions}>
-                      {ad.videoUrl ? (
-                        <Button
-                          label={t('campaigns.detail.download')}
-                          size="sm"
-                          variant="secondary"
-                          onPress={() => typeof window !== 'undefined' && window.open(ad.videoUrl!, '_blank')}
-                        />
-                      ) : null}
-                      {campaign.status !== 'LAUNCHED' && (
-                        <Button
-                          label="Éditer"
-                          size="sm"
-                          variant="ghost"
-                          onPress={() => router.push({ pathname: '/(app)/campaigns/new', params: { editCampaignId: campaign.id } })}
-                        />
-                      )}
-                    </View>
-                  </View>
+              <View style={styles.adVideoBlock}>
+                <View style={styles.adThumb}>
+                  {ad.videoUrl ? (
+                    <AdVideoThumb
+                      videoUrl={ad.videoUrl}
+                      fallback={<Ionicons name="film-outline" size={36} color={colors.primary} />}
+                    />
+                  ) : (
+                    <Ionicons name="film-outline" size={36} color={colors.primary} />
+                  )}
                 </View>
-              ))}
+                <View style={styles.adActions}>
+                  {ad.videoUrl ? (
+                    <Button
+                      label={t('campaigns.detail.download')}
+                      size="sm"
+                      variant="secondary"
+                      onPress={() => typeof window !== 'undefined' && window.open(ad.videoUrl!, '_blank')}
+                    />
+                  ) : null}
+                  {campaign.status !== 'LAUNCHED' && (
+                    <Button
+                      label="Éditer"
+                      size="sm"
+                      variant="ghost"
+                      onPress={() => router.push({ pathname: '/(app)/campaigns/new', params: { editCampaignId: campaign.id } })}
+                    />
+                  )}
+                </View>
+              </View>
             </View>
-          )}
-
-          {ads.length > 0 && (
-            <Button
-              label="+ New Campaign"
-              variant="secondary"
-              onPress={() => router.push('/(app)/campaigns/new')}
-            />
           )}
         </>
       )}
@@ -429,37 +395,16 @@ export default function CampaignDetailScreen() {
             </View>
           ) : null}
 
-          {ads.length > 0 && (
+          {ad && (
             <Card padding="md">
-              <View style={{ gap: spacing.sm }}>
-                <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                  Select ad to launch
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.sm }}>
+                <Ionicons name="film-outline" size={20} color={colors.primary} />
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textPrimary, flex: 1 }}>
+                  {t('campaigns.new.adVariant', { n: 1 })}
                 </Text>
-                {ads.map((ad, i) => (
-                  <TouchableOpacity
-                    key={ad.id}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: spacing.md,
-                      padding: spacing.md,
-                      borderRadius: radius.lg,
-                      borderWidth: 1.5,
-                      borderColor: selectedAdId === ad.id ? colors.primary : colors.border,
-                      backgroundColor: selectedAdId === ad.id ? colors.primaryBg : colors.bgElevated,
-                    }}
-                    onPress={() => setSelectedAdId(selectedAdId === ad.id ? null : ad.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="film-outline" size={20} color={selectedAdId === ad.id ? colors.primary : colors.textMuted} />
-                    <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textPrimary, flex: 1 }}>
-                      {t('campaigns.new.adVariant', { n: i + 1 })} · {ad.visualStyle}
-                    </Text>
-                    <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: selectedAdId === ad.id ? colors.primary : colors.border, backgroundColor: selectedAdId === ad.id ? colors.primary : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-                      {selectedAdId === ad.id && <Ionicons name="checkmark" size={12} color={colors.white} />}
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="checkmark" size={12} color={colors.white} />
+                </View>
               </View>
             </Card>
           )}
@@ -508,7 +453,7 @@ export default function CampaignDetailScreen() {
               label={launching ? t('campaigns.detail.metaLaunching') : t('campaigns.detail.metaLaunchBtn')}
               onPress={handleLaunchMeta}
               loading={launching}
-              disabled={!selectedAdId || metaPages.length === 0}
+              disabled={!ad || metaPages.length === 0}
             />
           )}
 

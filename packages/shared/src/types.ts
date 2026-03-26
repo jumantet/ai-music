@@ -2,13 +2,21 @@ export type Plan = 'FREE' | 'PRO';
 
 export type CampaignStatus = 'DRAFT' | 'GENERATING' | 'READY' | 'LAUNCHED';
 
-export type AdMood =
-  | 'dreamy'
-  | 'night_drive'
-  | 'indie'
-  | 'psychedelic'
-  | 'vintage'
-  | 'urban';
+export interface EditorSettings {
+  filterPreset?: string;
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  grain?: number;
+  motionPreset?: string;
+  text?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontColor?: string;
+  textBgColor?: string;
+  textBgOpacity?: number;
+  textPosition?: string;
+}
 
 export interface User {
   id: string;
@@ -18,6 +26,8 @@ export interface User {
   emailVerified: boolean;
   metaConnected?: boolean;
   metaAdAccountId?: string;
+  spotifyArtistId?: string;
+  spotifyArtistName?: string;
   createdAt: string;
   campaigns: Campaign[];
 }
@@ -27,13 +37,16 @@ export interface Campaign {
   userId: string;
   trackTitle: string;
   artistName: string;
+  spotifyTrackId?: string;
   trackS3Key?: string;
   trackUrl?: string;
   hookStart?: number;
   hookEnd?: number;
-  mood?: AdMood;
+  videoS3Key?: string;
+  videoUrl?: string;
+  editorSettings?: EditorSettings;
   status: CampaignStatus;
-  generatedAds: GeneratedAd[];
+  generatedAd?: GeneratedAd;
   metaCampaignId?: string;
   createdAt: string;
 }
@@ -50,8 +63,6 @@ export interface GeneratedAd {
   campaignId: string;
   videoS3Key?: string;
   videoUrl?: string;
-  visualStyle: string;
-  textOverlay?: string;
   metaAdId?: string;
   createdAt: string;
 }

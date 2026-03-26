@@ -3,6 +3,8 @@ import { userResolvers } from './user';
 import { campaignResolvers } from './campaign';
 import { metaAdsResolvers } from './metaAds';
 import { billingResolvers } from './billing';
+import { spotifyResolvers } from './spotify';
+import { trackResolvers } from './track';
 
 function mergeResolvers(...resolverSets: Record<string, Record<string, unknown>>[]) {
   const merged: Record<string, Record<string, unknown>> = {};
@@ -19,5 +21,7 @@ export const resolvers = mergeResolvers(
   userResolvers,
   campaignResolvers,
   metaAdsResolvers,
-  billingResolvers
+  billingResolvers,
+  spotifyResolvers,
+  trackResolvers
 );

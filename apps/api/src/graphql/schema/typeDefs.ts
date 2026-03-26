@@ -21,8 +21,52 @@ export const typeDefs = `#graphql
     emailVerified: Boolean!
     metaAdAccountId: String
     metaConnected: Boolean!
+    spotifyArtistId: String
+    spotifyArtistName: String
     createdAt: String!
     campaigns: [Campaign!]!
+  }
+
+  type SpotifyArtist {
+    id: ID!
+    name: String!
+    imageUrl: String
+  }
+
+  type SpotifyTrack {
+    id: ID!
+    name: String!
+    artistName: String!
+    albumName: String!
+    albumImageUrl: String
+    durationMs: Int!
+  }
+
+  """Morceau persisté (sync Spotify) pour l’utilisateur connecté."""
+  type CatalogTrack {
+    id: ID!
+    spotifyTrackId: String!
+    name: String!
+    artistName: String!
+    albumName: String!
+    albumImageUrl: String
+    durationMs: Int!
+  }
+
+  type EditorSettings {
+    filterPreset: String
+    brightness: Int
+    contrast: Int
+    saturation: Int
+    grain: Int
+    motionPreset: String
+    text: String
+    fontFamily: String
+    fontSize: Int
+    fontColor: String
+    textBgColor: String
+    textBgOpacity: Float
+    textPosition: String
   }
 
   type Campaign {
@@ -30,16 +74,17 @@ export const typeDefs = `#graphql
     userId: ID!
     trackTitle: String!
     artistName: String!
+    spotifyTrackId: String
     trackS3Key: String
     trackUrl: String
     hookStart: Float
     hookEnd: Float
-    mood: String
-    customVideoS3Key: String
-    customVideoUrl: String
+    videoS3Key: String
+    videoUrl: String
+    editorSettings: EditorSettings
     status: CampaignStatus!
     metaCampaignId: String
-    generatedAds: [GeneratedAd!]!
+    generatedAd: GeneratedAd
     createdAt: String!
   }
 
@@ -48,8 +93,6 @@ export const typeDefs = `#graphql
     campaignId: ID!
     videoS3Key: String
     videoUrl: String
-    visualStyle: String!
-    textOverlay: String
     metaAdId: String
     createdAt: String!
   }
@@ -116,6 +159,7 @@ export const typeDefs = `#graphql
     contrast: Int
     saturation: Int
     grain: Int
+    motionPreset: String
     text: String
     fontFamily: String
     fontSize: Int
@@ -123,8 +167,6 @@ export const typeDefs = `#graphql
     textBgColor: String
     textBgOpacity: Float
     textPosition: String
-    fadeIn: Float
-    fadeOut: Float
   }
 
   type AuthPayload {
@@ -147,25 +189,33 @@ export const typeDefs = `#graphql
     searchVideosForMood(mood: String!, page: Int, keywords: [String!]): PexelsVideosPage!
     metaAdAccounts: [MetaAdAccount!]!
     metaPages: [MetaPage!]!
+
+    spotifySearchArtists(query: String!): [SpotifyArtist!]!
+    # Recherche catalogue Spotify sans session (ex. avant login). Limite côté serveur.
+    spotifySearchArtistsPublic(query: String!): [SpotifyArtist!]!
+    spotifyArtistTracks(artistId: ID!, limit: Int): [SpotifyTrack!]!
+    myCatalogTracks: [CatalogTrack!]!
   }
 
   type Mutation {
-    signup(email: String!, password: String!, name: String!): AuthPayload!
+    signup(email: String!, password: String!): AuthPayload!
     login(email: String!, password: String!): AuthPayload!
     verifyEmail(token: String!): AuthPayload!
     resendVerificationEmail: Boolean!
 
-    createCampaign(trackTitle: String!, artistName: String!): Campaign!
+    createCampaign(trackTitle: String!, artistName: String!, spotifyTrackId: String): Campaign!
     updateCampaign(
       id: ID!
       hookStart: Float
       hookEnd: Float
-      mood: String
       trackS3Key: String
-      customVideoS3Key: String
+      spotifyTrackId: String
+      videoS3Key: String
+      videoUrl: String
+      editorSettings: EditorSettingsInput
     ): Campaign!
     deleteCampaign(id: ID!): Boolean!
-    generateAds(campaignId: ID!, selectedVideoUrl: String, editorSettings: EditorSettingsInput): Campaign!
+    generateAds(campaignId: ID!): Campaign!
 
     getUploadUrl(campaignId: ID!, fileType: String!, contentType: String!): UploadUrlPayload!
 
@@ -174,6 +224,12 @@ export const typeDefs = `#graphql
 
     connectMeta(accessToken: String!, adAccountId: String!): User!
     disconnectMeta: User!
+
+    """Lie la page artiste Spotify (ID catalogue public) au compte utilisateur."""
+    linkSpotifyArtist(spotifyArtistId: String!, spotifyArtistName: String!): User!
+    unlinkSpotifyArtist: User!
+    """Resynchronise les titres depuis Spotify pour l’artiste lié (remplace la table Track)."""
+    syncMyCatalogTracks: Int!
     launchMetaAd(
       campaignId: ID!
       adId: ID!

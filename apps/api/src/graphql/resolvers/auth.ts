@@ -4,22 +4,29 @@ import { prisma } from '../../services/prisma';
 import { signToken, requireAuth } from '../../middleware/auth';
 import { sendVerificationEmail } from '../../services/email';
 import type { AuthContext } from '../../middleware/auth';
+import { GraphQLError } from 'graphql';
 
 function generateVerifyToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+/** Affichage initial du compte (User.name requis) — dérivé de la partie locale de l’email. */
+function defaultNameFromEmail(email: string): string {
+  const local = email.trim().split('@')[0] ?? '';
+  const cleaned = local.replace(/[.+_-]+/g, ' ').trim();
+  if (!cleaned) return 'Artist';
+  return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export const authResolvers = {
   Mutation: {
-    signup: async (
-      _: unknown,
-      { email, password, name }: { email: string; password: string; name: string }
-    ) => {
+    signup: async (_: unknown, { email, password }: { email: string; password: string }) => {
       const existing = await prisma.user.findUnique({ where: { email } });
       if (existing) throw new Error('Email already in use');
 
       const hashed = await bcrypt.hash(password, 12);
       const verifyToken = generateVerifyToken();
+      const name = defaultNameFromEmail(email);
 
       const user = await prisma.user.create({
         data: { email, password: hashed, name, verifyToken },
@@ -40,6 +47,12 @@ export const authResolvers = {
     ) => {
       const user = await prisma.user.findUnique({ where: { email } });
       if (!user) throw new Error('Invalid credentials');
+
+      if (!user.password) {
+        throw new GraphQLError('This account has no password set.', {
+          extensions: { code: 'LOGIN_NO_PASSWORD' },
+        });
+      }
 
       const valid = await bcrypt.compare(password, user.password);
       if (!valid) throw new Error('Invalid credentials');
