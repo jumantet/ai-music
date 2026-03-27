@@ -199,7 +199,7 @@ const fr = {
       artistNameLabel: "Nom de l'artiste *",
       artistNamePlaceholder: 'California Disco Suicide',
       uploadTrackLabel: 'Importe ton morceau',
-      uploadTrackHint: 'WAV ou MP3 recommandé — max 50 Mo',
+      uploadTrackHint: 'WAV / MP3 — max 50 Mo',
       trackUploaded: 'Morceau uploadé',
       uploading: 'Upload en cours…',
       continueBtn: 'Continuer →',

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
@@ -92,6 +92,8 @@ export function TopBar() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
 
   const initials = user?.name
     ? user.name
@@ -112,14 +114,16 @@ export function TopBar() {
       </TouchableOpacity>
 
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.newBtn}
-          onPress={() => router.push('/(app)/campaigns/new')}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="add" size={16} color={colors.white} />
-          <Text style={styles.newBtnText}>Nouvelle vidéo</Text>
-        </TouchableOpacity>
+        {!isMobile && (
+          <TouchableOpacity
+            style={styles.newBtn}
+            onPress={() => router.push('/(app)/campaigns/new')}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="add" size={16} color={colors.white} />
+            <Text style={styles.newBtnText}>Nouvelle vidéo</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.iconBtn}

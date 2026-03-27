@@ -200,7 +200,7 @@ const en = {
       artistNameLabel: 'Artist name *',
       artistNamePlaceholder: 'California Disco Suicide',
       uploadTrackLabel: 'Import track',
-      uploadTrackHint: 'WAV or MP3 — max 50MB',
+      uploadTrackHint: 'WAV / MP3 — max 50 MB',
       trackUploaded: 'Track uploaded',
       uploading: 'Uploading...',
       continueBtn: 'Continue →',

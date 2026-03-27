@@ -407,7 +407,7 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, thumbWidth: number)
     exportRowLabel: { fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textPrimary },
     exportRowSub: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted },
 
-    actions: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'flex-end' },
+    actions: { flexDirection: 'row', gap: spacing.sm, justifyContent: isMobile ? 'stretch' : 'flex-end' },
     muted: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
     errorText: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.error },
     successText: {
@@ -1151,9 +1151,6 @@ export default function NewCampaignScreen() {
                     </Text>
                   )}
                 </View>
-                <Text style={[styles.stepLabel, isDone ? styles.stepLabelDone : isActive ? styles.stepLabelActive : styles.stepLabelInactive]}>
-                  {label}
-                </Text>
               </TouchableOpacity>
             </React.Fragment>
           );
@@ -1323,7 +1320,7 @@ export default function NewCampaignScreen() {
                 {t('campaigns.new.wizardStepUploadAudio')}
               </Text>
               <TouchableOpacity onPress={() => setShowAudioHint(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                <Ionicons name="information-circle-outline" size={15} color={colors.textMuted} />
+                <Ionicons name="information-circle-outline" size={isMobile ? 19 : 15} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -1354,6 +1351,7 @@ export default function NewCampaignScreen() {
                 label={t('campaigns.new.continueBtn')}
                 onPress={handleStep1Continue}
                 loading={creating}
+                fullWidth={isMobile}
               />
             </View>
           </View>
@@ -1404,6 +1402,7 @@ export default function NewCampaignScreen() {
               <Button
                 label={t('campaigns.new.continueBtn')}
                 onPress={() => void handleStep2Continue()}
+                fullWidth={isMobile}
               />
             </View>
           </View>
@@ -1470,7 +1469,7 @@ export default function NewCampaignScreen() {
                   ))}
                 </View>
                 <View style={styles.actions}>
-                  <Button label={t('campaigns.new.continueBtn')} onPress={() => setStep(5)} />
+                  <Button label={t('campaigns.new.continueBtn')} onPress={() => setStep(5)} fullWidth={isMobile} />
                 </View>
               </>
             )}
