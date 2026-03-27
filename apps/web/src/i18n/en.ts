@@ -55,6 +55,7 @@ const en = {
     unverifiedBanner: {
       prompt: 'Please verify your email address to unlock all features.',
       sent: 'Verification email sent. Check your inbox.',
+      error: 'Failed to send. Please try again.',
       resend: 'Resend email',
     },
     verificationModal: {
@@ -162,13 +163,12 @@ const en = {
       wizardStepGenerate: 'Generate',
       wizardStepExport: 'Export',
       wizardTrackTitle: 'Streaming link & audio',
-      wizardTrackSubtitle:
-        'Paste your track’s public link, fetch title and artwork, then import your WAV or MP3 for analysis and ad generation.',
+      wizardTrackSubtitle: 'Paste your track link, then import your audio file.',
       wizardStepStreamingLink: 'Track link',
       wizardStepPickTrack: 'Your catalog',
       wizardStepPickTrackOptional: 'Or from your saved catalog',
       streamingLinkPlaceholder: 'YouTube, SoundCloud, Apple Music link…',
-      streamingLinkFetchBtn: 'Fetch title & cover',
+      streamingLinkFetchBtn: 'Fetch →',
       streamingPlatformsHint:
         'Supports common public track links (video or audio). If it fails, make sure the URL opens the track page.',
       streamingUrlEmpty: 'Paste your track link first.',
@@ -183,8 +183,8 @@ const en = {
       step2VideoTitle: 'Choose your video clip',
       step2VideoSubtitle:
         'Royalty-free visuals were suggested from the detected mood. Pick the one that fits your ad.',
-      wizardStepUploadAudio: 'Upload audio',
-      wizardPickTrackHint: 'Open your catalog and choose a track. Use Refresh catalog if titles are missing.',
+      wizardStepUploadAudio: 'Audio file',
+      wizardPickTrackHint: 'Choose a track from your catalog.',
       step1: 'Upload',
       step2: 'Hook',
       step3: 'Video',
@@ -199,7 +199,7 @@ const en = {
       trackTitlePlaceholder: 'Driving on My Own',
       artistNameLabel: 'Artist name *',
       artistNamePlaceholder: 'California Disco Suicide',
-      uploadTrackLabel: 'Upload Track',
+      uploadTrackLabel: 'Import track',
       uploadTrackHint: 'WAV or MP3 — max 50MB',
       trackUploaded: 'Track uploaded',
       uploading: 'Uploading...',

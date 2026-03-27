@@ -22,7 +22,6 @@ import {
   UPDATE_CAMPAIGN_MUTATION,
   GENERATE_ADS_MUTATION,
   GET_UPLOAD_URL_MUTATION,
-  SYNC_MY_CATALOG_TRACKS_MUTATION,
 } from '../../../src/graphql/mutations';
 import { useMutation as useResendMutation } from '@apollo/client';
 import { RESEND_VERIFICATION_MUTATION } from '../../../src/graphql/mutations';
@@ -31,8 +30,6 @@ import {
   SUGGEST_MOOD_QUERY,
   SEARCH_VIDEOS_FOR_MOOD_QUERY,
   CAMPAIGN_QUERY,
-  ME_QUERY,
-  MY_CATALOG_TRACKS_QUERY,
   STREAMING_TRACK_FROM_URL_QUERY,
 } from '../../../src/graphql/queries';
 import { Button, Card } from '../../../src/components/ui';
@@ -150,7 +147,7 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, thumbWidth: number)
     },
 
     // Header
-    topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    topRow: { flexDirection: 'row', alignItems: 'center' },
     backBtn: {
       width: 36,
       height: 36,
@@ -163,6 +160,8 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, thumbWidth: number)
       fontFamily: fonts.bold,
       fontSize: fontSize.xl,
       color: colors.textPrimary,
+      flex: 1,
+      textAlign: 'center',
     },
 
     // Step indicator
@@ -449,12 +448,9 @@ export default function NewCampaignScreen() {
   const [pendingTrackFile, setPendingTrackFile] = useState<File | null>(null);
   const [pickedSpotifyTrackId, setPickedSpotifyTrackId] = useState<string | null>(null);
   const [pickedSpotifyCoverUrl, setPickedSpotifyCoverUrl] = useState<string | null>(null);
-  const [spotifyModalVisible, setSpotifyModalVisible] = useState(false);
-  const [trackPickerFilter, setTrackPickerFilter] = useState('');
   const [streamingUrlInput, setStreamingUrlInput] = useState('');
   const [stockVideoOptions, setStockVideoOptions] = useState<StockVideoOption[]>([]);
   const [selectedStockVideoId, setSelectedStockVideoId] = useState<string | null>(null);
-  const initialCatalogSyncDone = useRef(false);
   const [campaignId, setCampaignId] = useState<string | null>(null);
 
   const [videoSource, setVideoSource] = useState<'stock' | 'own'>('stock');
@@ -503,6 +499,7 @@ export default function NewCampaignScreen() {
   const [generatedAds, setGeneratedAds] = useState<Array<{ id: string; videoUrl?: string; visualStyle: string; textOverlay?: string }>>([]);
 
   const [error, setError] = useState<string | null>(null);
+  const [showAudioHint, setShowAudioHint] = useState(false);
   const [showVerifModal, setShowVerifModal] = useState(false);
   const [resendSent, setResendSent] = useState(false);
   const [resendError, setResendError] = useState(false);
@@ -544,84 +541,10 @@ export default function NewCampaignScreen() {
   const [generateAds, { loading: generating }] = useMutation(GENERATE_ADS_MUTATION);
   const [getUploadUrl] = useMutation(GET_UPLOAD_URL_MUTATION);
 
-  const { data: meData } = useQuery(ME_QUERY, {
-    skip: Boolean(editCampaignId),
-  });
-  const spotifyArtistId = meData?.me?.spotifyArtistId ?? null;
-
-  const {
-    data: catalogQueryData,
-    loading: catalogTracksLoading,
-    error: catalogQueryError,
-    refetch: refetchCatalogTracks,
-  } = useQuery(MY_CATALOG_TRACKS_QUERY, {
-    skip: Boolean(editCampaignId) || !spotifyArtistId,
-    fetchPolicy: 'cache-and-network',
-  });
-  const catalogTracks = catalogQueryData?.myCatalogTracks ?? [];
-
-  const [syncCatalogTracks, { loading: syncingCatalog }] = useMutation(SYNC_MY_CATALOG_TRACKS_MUTATION);
-
   const [fetchStreamingTrackFromUrl, { loading: fetchingStreamingTrack }] = useLazyQuery(
     STREAMING_TRACK_FROM_URL_QUERY,
     { fetchPolicy: 'network-only' }
   );
-
-  const filteredCatalogTracks = useMemo(() => {
-    const f = trackPickerFilter.trim().toLowerCase();
-    if (!f) return catalogTracks;
-    return catalogTracks.filter(
-      (tr: { name: string; albumName: string }) =>
-        tr.name.toLowerCase().includes(f) || tr.albumName.toLowerCase().includes(f)
-    );
-  }, [catalogTracks, trackPickerFilter]);
-
-  useEffect(() => {
-    if (editCampaignId || step !== 1 || !spotifyArtistId || !meData?.me?.emailVerified) return;
-    if (initialCatalogSyncDone.current) return;
-    initialCatalogSyncDone.current = true;
-    (async () => {
-      try {
-        await syncCatalogTracks();
-      } catch {
-        /* Spotify / réseau */
-      }
-      await refetchCatalogTracks();
-    })();
-  }, [editCampaignId, step, spotifyArtistId, meData?.me?.emailVerified, syncCatalogTracks, refetchCatalogTracks]);
-
-  function closeSpotifyCatalogModal() {
-    setSpotifyModalVisible(false);
-    setTrackPickerFilter('');
-  }
-
-  async function openSpotifyCatalogModal() {
-    setTrackPickerFilter('');
-    setSpotifyModalVisible(true);
-    await refetchCatalogTracks();
-  }
-
-  async function handleRefreshCatalogInModal() {
-    try {
-      await syncCatalogTracks();
-    } catch {
-      /* */
-    }
-    await refetchCatalogTracks();
-  }
-
-  function handlePickSpotifyCatalogTrack(tr: {
-    spotifyTrackId: string;
-    name: string;
-    artistName: string;
-    albumImageUrl?: string | null;
-  }) {
-    setTrackTitle(tr.name);
-    setArtistName(tr.artistName);
-    setPickedSpotifyTrackId(tr.spotifyTrackId);
-    setPickedSpotifyCoverUrl(tr.albumImageUrl ?? null);
-    closeSpotifyCatalogModal();
-  }
 
   const STEP_LABELS = [
     t('campaigns.new.wizardStepTrack'),
@@ -780,7 +703,9 @@ export default function NewCampaignScreen() {
       return;
     }
     if (!pendingTrackFile) {
-      setError(t('campaigns.new.errorTrackRequired'));
+      setError(trackTitle.trim()
+        ? `Merci d'importer le fichier audio de "${trackTitle}"`
+        : t('campaigns.new.errorTrackRequired'));
       return;
     }
     setError(null);
@@ -955,6 +880,91 @@ export default function NewCampaignScreen() {
   function renderAuxiliaryModals() {
     return (
       <>
+        {/* ── Audio hint info modal ── */}
+        <Modal visible={showAudioHint} transparent animationType="fade" onRequestClose={() => setShowAudioHint(false)}>
+          <TouchableWithoutFeedback onPress={() => setShowAudioHint(false)}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl }}>
+              <TouchableWithoutFeedback>
+                <View style={{
+                  backgroundColor: colors.bgCard,
+                  borderRadius: radius.lg,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  padding: spacing.xl,
+                  width: '100%',
+                  maxWidth: 380,
+                  gap: spacing.md,
+                  alignItems: 'center',
+                }}>
+                  <View style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: radius.full,
+                    backgroundColor: colors.primaryBg,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Ionicons name="musical-notes-outline" size={22} color={colors.primary} />
+                  </View>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.textPrimary, textAlign: 'center' }}>
+                    Pourquoi un fichier audio ?
+                  </Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 }}>
+                    {"L'IA analyse le son pour détecter les moments forts de ton morceau et suggérer les visuels les plus adaptés à ta promo."}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setShowAudioHint(false)}
+                    style={{ backgroundColor: colors.primary, borderRadius: radius.full, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.xs }}
+                  >
+                    <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.white }}>OK</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+
+        {/* ── Error modal ── */}
+        <Modal visible={!!error} transparent animationType="fade" onRequestClose={() => setError(null)}>
+          <TouchableWithoutFeedback onPress={() => setError(null)}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl }}>
+              <TouchableWithoutFeedback>
+                <View style={{
+                  backgroundColor: colors.bgCard,
+                  borderRadius: radius.lg,
+                  borderWidth: 1,
+                  borderColor: colors.error,
+                  padding: spacing.xl,
+                  width: '100%',
+                  maxWidth: 380,
+                  gap: spacing.md,
+                  alignItems: 'center',
+                }}>
+                  <View style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: radius.full,
+                    backgroundColor: colors.errorBg,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Ionicons name="alert-circle-outline" size={24} color={colors.error} />
+                  </View>
+                  <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.md, color: colors.textPrimary, textAlign: 'center' }}>
+                    {error}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setError(null)}
+                    style={{ backgroundColor: colors.bgElevated, borderRadius: radius.full, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.xs }}
+                  >
+                    <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textPrimary }}>OK</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+
         {/* ── Step 1 upload overlay ── */}
         <Modal visible={uploadOverlay} transparent animationType="fade">
           <View style={{
@@ -1105,154 +1115,6 @@ export default function NewCampaignScreen() {
           </TouchableWithoutFeedback>
         </Modal>
 
-        {/* ── Titres depuis le catalogue synchronisé (profil artiste lié) ── */}
-        <Modal visible={spotifyModalVisible} transparent animationType="fade" onRequestClose={closeSpotifyCatalogModal}>
-          <TouchableWithoutFeedback onPress={closeSpotifyCatalogModal}>
-            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg }}>
-              <TouchableWithoutFeedback>
-                <View
-                  style={{
-                    backgroundColor: colors.bgCard,
-                    borderRadius: radius.lg,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    width: '100%',
-                    maxWidth: 440,
-                    maxHeight: '85%' as any,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm }}>
-                    <Text style={{ fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.textPrimary, flex: 1 }} numberOfLines={2}>
-                      {t('campaigns.new.catalogModalTitle')}
-                    </Text>
-                    <TouchableOpacity onPress={closeSpotifyCatalogModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                      <Ionicons name="close" size={24} color={colors.textMuted} />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.sm }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                      <TouchableOpacity
-                        onPress={() => handleRefreshCatalogInModal()}
-                        disabled={syncingCatalog}
-                        style={{
-                          paddingVertical: spacing.xs,
-                          paddingHorizontal: spacing.sm,
-                          borderRadius: radius.md,
-                          backgroundColor: colors.primaryBg,
-                        }}
-                      >
-                        {syncingCatalog ? (
-                          <ActivityIndicator size="small" color={colors.primary} />
-                        ) : (
-                          <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.primary }}>
-                            {t('campaigns.new.catalogSyncBtn')}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                    <TextInput
-                      value={trackPickerFilter}
-                      onChangeText={setTrackPickerFilter}
-                      placeholder={t('campaigns.new.catalogFilterPlaceholder')}
-                      placeholderTextColor={colors.textMuted}
-                      style={{
-                        fontFamily: fonts.regular,
-                        fontSize: fontSize.md,
-                        color: colors.textPrimary,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                        borderRadius: radius.md,
-                        paddingHorizontal: spacing.md,
-                        paddingVertical: spacing.sm,
-                      }}
-                    />
-                    {catalogQueryError ? (
-                      <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.error }}>
-                        {t('campaigns.new.spotifyLoadError')}
-                      </Text>
-                    ) : null}
-                    <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
-                      {catalogTracksLoading && filteredCatalogTracks.length === 0 ? (
-                        <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
-                      ) : filteredCatalogTracks.length === 0 ? (
-                        <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted, paddingVertical: spacing.md }}>
-                          {t('campaigns.new.catalogEmptyStored')}
-                        </Text>
-                      ) : (
-                        filteredCatalogTracks.map(
-                          (tr: {
-                            id: string;
-                            spotifyTrackId: string;
-                            name: string;
-                            artistName: string;
-                            albumName: string;
-                            albumImageUrl?: string | null;
-                            durationMs: number;
-                          }) => (
-                            <TouchableOpacity
-                              key={tr.id}
-                              onPress={() => handlePickSpotifyCatalogTrack(tr)}
-                              style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: spacing.md,
-                                paddingVertical: spacing.sm,
-                                borderBottomWidth: 1,
-                                borderBottomColor: colors.border,
-                              }}
-                            >
-                              {tr.albumImageUrl ? (
-                                <Image
-                                  source={{ uri: tr.albumImageUrl }}
-                                  style={{
-                                    width: 44,
-                                    height: 44,
-                                    borderRadius: radius.sm,
-                                    backgroundColor: colors.primaryBg,
-                                  }}
-                                />
-                              ) : (
-                                <View
-                                  style={{
-                                    width: 44,
-                                    height: 44,
-                                    borderRadius: radius.sm,
-                                    backgroundColor: colors.primaryBg,
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                  }}
-                                >
-                                  <Ionicons name="musical-note" size={18} color={colors.textMuted} />
-                                </View>
-                              )}
-                              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                                <Text
-                                  style={{ fontFamily: fonts.semiBold, fontSize: fontSize.sm, color: colors.textPrimary }}
-                                  numberOfLines={2}
-                                >
-                                  {tr.name}
-                                </Text>
-                                <Text
-                                  style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted }}
-                                  numberOfLines={1}
-                                >
-                                  {tr.albumName} · {formatTrackDurationMs(tr.durationMs)}
-                                </Text>
-                              </View>
-                            </TouchableOpacity>
-                          )
-                        )
-                      )}
-                    </ScrollView>
-                  </View>
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </Modal>
-
       </>
     );
   }
@@ -1260,12 +1122,6 @@ export default function NewCampaignScreen() {
   const pageHeader = (
     <View style={step === 3 ? styles.editorPageHeader : undefined}>
       {/* Header */}
-      <View style={styles.topRow}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={18} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <Text style={styles.pageTitle}>{t('campaigns.new.title')}</Text>
-      </View>
 
       {/* Step indicator — séquence 1 → 4 → 5 → 6 */}
       <View style={styles.stepRow}>
@@ -1304,7 +1160,6 @@ export default function NewCampaignScreen() {
         })}
       </View>
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>
   );
 
@@ -1421,34 +1276,7 @@ export default function NewCampaignScreen() {
               loading={fetchingStreamingTrack}
               fullWidth
             />
-            <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted, lineHeight: 18 }}>
-              {t('campaigns.new.streamingPlatformsHint')}
-            </Text>
 
-            {spotifyArtistId ? (
-              <>
-                <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: spacing.sm }}>
-                  {t('campaigns.new.wizardStepPickTrackOptional')}
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                  <Button
-                    label={
-                      trackTitle.trim() ? t('campaigns.new.catalogChangeTrackBtn') : t('campaigns.new.savedCatalogBtn')
-                    }
-                    onPress={openSpotifyCatalogModal}
-                    variant="ghost"
-                    style={{ flex: 1, minWidth: 160 }}
-                  />
-                  <Button
-                    label={t('campaigns.new.catalogSyncBtn')}
-                    onPress={() => void handleRefreshCatalogInModal()}
-                    variant="ghost"
-                    loading={syncingCatalog}
-                    style={{ minWidth: 120 }}
-                  />
-                </View>
-              </>
-            ) : null}
             {trackTitle.trim() && artistName.trim() ? (
               <View
                 style={{
@@ -1488,18 +1316,16 @@ export default function NewCampaignScreen() {
                 </View>
                 <Ionicons name="checkmark-circle" size={22} color={colors.success} />
               </View>
-            ) : (
-              <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted }}>
-                {t('campaigns.new.wizardPickTrackHint')}
-              </Text>
-            )}
+            ) : null}
 
-            <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: spacing.sm }}>
-              {t('campaigns.new.wizardStepUploadAudio')}
-            </Text>
-            <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.xs }}>
-              {t('campaigns.new.streamingAudioNote')}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm }}>
+              <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                {t('campaigns.new.wizardStepUploadAudio')}
+              </Text>
+              <TouchableOpacity onPress={() => setShowAudioHint(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                <Ionicons name="information-circle-outline" size={15} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
 
             {pendingTrackFile ? (
               <View style={styles.uploadedRow}>
@@ -1516,7 +1342,9 @@ export default function NewCampaignScreen() {
                 activeOpacity={0.7}
               >
                 <Ionicons name="cloud-upload-outline" size={32} color={colors.textMuted} />
-                <Text style={styles.uploadZoneLabel}>{t('campaigns.new.uploadTrackLabel')}</Text>
+                <Text style={styles.uploadZoneLabel}>
+                  {trackTitle.trim() ? `Importe "${trackTitle}"` : t('campaigns.new.uploadTrackLabel')}
+                </Text>
                 <Text style={styles.uploadZoneHint}>{t('campaigns.new.uploadTrackHint')}</Text>
               </TouchableOpacity>
             )}

@@ -117,7 +117,7 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
     pageSubtitle: {
       fontFamily: fonts.regular,
       fontSize: fontSize.sm,
-      color: colors.textMuted,
+      color: colors.textSecondary,
       marginTop: 2,
     },
 
@@ -192,18 +192,27 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
       paddingBottom: spacing.xxxl,
       gap: spacing.md,
     },
-    emptyIcon: {
-      width: 80,
-      height: 80,
+    emptyGlowRing: {
+      width: 128,
+      height: 128,
       borderRadius: radius.full,
-      backgroundColor: colors.primaryBg,
+      backgroundColor: 'rgba(79, 126, 255, 0.07)',
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: spacing.sm,
     },
+    emptyIcon: {
+      width: 96,
+      height: 96,
+      borderRadius: radius.full,
+      backgroundColor: colors.primaryBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...(Platform.OS === 'web' ? ({ boxShadow: '0 0 40px rgba(79,126,255,0.35)' } as any) : {}),
+    },
     emptyTitle: {
-      fontFamily: fonts.bold,
-      fontSize: fontSize.xl,
+      fontFamily: fonts.extraBold,
+      fontSize: fontSize.xxl,
       color: colors.textPrimary,
     },
     emptyBody: {
@@ -211,8 +220,8 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
       fontSize: fontSize.md,
       color: colors.textSecondary,
       textAlign: 'center',
-      lineHeight: 22,
-      maxWidth: 320,
+      lineHeight: 24,
+      maxWidth: 380,
     },
 
     muted: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
@@ -301,16 +310,20 @@ export default function DashboardScreen() {
         <Text style={styles.muted}>{t('common.loading')}</Text>
       ) : tracks.length === 0 ? (
         <View style={styles.empty}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="musical-notes-outline" size={36} color={colors.primary} />
+          <View style={styles.emptyGlowRing}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="musical-notes-outline" size={44} color={colors.primary} />
+            </View>
           </View>
           <Text style={styles.emptyTitle}>Commence ta première promo</Text>
           <Text style={styles.emptyBody}>
-            Chaque morceau que tu promeus apparaît ici — avec toutes ses vidéos ads et leurs performances.
+            Chaque morceau que tu promeus apparaît ici — avec toutes ses vidéos pub et leurs performances.
           </Text>
           <Button
             label="Créer ma première vidéo promo"
             onPress={() => router.push('/(app)/campaigns/new')}
+            size="lg"
+            style={{ minWidth: 260 }}
           />
         </View>
       ) : (

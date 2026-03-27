@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useMutation } from "@apollo/client";
 import { useTranslation } from "react-i18next";
 import { RESEND_VERIFICATION_MUTATION } from "../../graphql/mutations";
@@ -10,10 +11,10 @@ import type { ColorPalette } from "../../theme";
 const makeStyles = (colors: ColorPalette) =>
   StyleSheet.create({
     banner: {
-      backgroundColor: colors.warningBg,
+      backgroundColor: colors.infoBg,
       borderRadius: radius.md,
       borderWidth: 1,
-      borderColor: colors.warning,
+      borderColor: colors.info,
       paddingTop: spacing.sm,
       paddingBottom: spacing.sm,
       paddingLeft: spacing.md,
@@ -21,19 +22,22 @@ const makeStyles = (colors: ColorPalette) =>
       marginBottom: spacing.lg,
       flexDirection: "row",
       alignItems: "center",
-      gap: spacing.md,
+      gap: spacing.sm,
       flexWrap: "wrap",
+    },
+    icon: {
+      opacity: 0.8,
     },
     text: {
       fontFamily: fonts.regular,
       fontSize: fontSize.sm,
-      color: colors.textPrimary,
+      color: colors.textSecondary,
       flex: 1,
     },
     link: {
       fontFamily: fonts.semiBold,
       fontSize: fontSize.sm,
-      color: colors.white,
+      color: colors.primaryLight,
       textDecorationLine: "underline",
     },
   });
@@ -59,6 +63,7 @@ export function UnverifiedBanner() {
 
   return (
     <View style={styles.banner}>
+      <Ionicons name="mail-outline" size={15} color={colors.primaryLight} style={styles.icon} />
       <Text style={styles.text}>
         {sent
           ? t("auth.unverifiedBanner.sent")

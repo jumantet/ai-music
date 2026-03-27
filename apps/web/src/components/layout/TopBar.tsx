@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
@@ -55,6 +55,7 @@ const makeStyles = (colors: ColorPalette) =>
       paddingVertical: 7,
       paddingHorizontal: spacing.md,
       borderRadius: radius.full,
+      ...(Platform.OS === 'web' ? ({ boxShadow: '0 4px 18px rgba(79,126,255,0.45)' } as any) : {}),
     },
     newBtnText: {
       fontFamily: fonts.semiBold,
