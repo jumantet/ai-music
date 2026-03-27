@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,235 +6,547 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { Link, router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
-import { useTranslation } from 'react-i18next';
 import { ME_QUERY } from '../../../src/graphql/queries';
-import { Button, Card, Badge } from '../../../src/components/ui';
+import { Badge, Button } from '../../../src/components/ui';
 import { useTheme } from '../../../src/hooks/useTheme';
 import { useIsMobile } from '../../../src/hooks/useIsMobile';
 import { spacing, fontSize, radius, fonts } from '../../../src/theme';
 import type { ColorPalette } from '../../../src/theme';
 import type { Campaign } from '@toolkit/shared';
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function statusVariant(s: string): 'default' | 'success' | 'warning' | 'info' {
+  if (s === 'LAUNCHED') return 'success';
+  if (s === 'READY') return 'info';
+  if (s === 'GENERATING') return 'warning';
+  return 'default';
+}
+
+function statusLabel(s: string): string {
+  if (s === 'LAUNCHED') return 'Lancée';
+  if (s === 'READY') return 'Prête';
+  if (s === 'GENERATING') return 'Génération…';
+  return 'Brouillon';
+}
+
+function trackAccentColor(title: string): string {
+  const palette = [
+    '#4F7EFF', '#8B5CF6', '#EC4899', '#F59E0B',
+    '#10B981', '#EF4444', '#06B6D4', '#F97316',
+  ];
+  let h = 0;
+  for (let i = 0; i < title.length; i++) h = (h * 31 + title.charCodeAt(i)) & 0xffff;
+  return palette[h % palette.length];
+}
+
+function AdVideoThumb({ videoUrl, fallback }: { videoUrl: string; fallback: React.ReactNode }) {
+  const [errored, setErrored] = useState(false);
+  if (errored) return <>{fallback}</>;
+  return React.createElement('video', {
+    src: videoUrl,
+    muted: true,
+    playsInline: true,
+    loop: true,
+    autoPlay: true,
+    preload: 'metadata',
+    onError: () => setErrored(true),
+    style: {
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover',
+      display: 'block',
+      borderRadius: 12,
+    },
+  });
+}
+
+// ─── styles ──────────────────────────────────────────────────────────────────
+
 const makeStyles = (colors: ColorPalette, isMobile: boolean) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bgCard },
     container: {
-      padding: isMobile ? spacing.md : spacing.xl,
+      paddingBottom: spacing.xxxl,
+    },
+
+    // Track hero
+    hero: {
+      flexDirection: isMobile ? 'column' : 'row',
+      alignItems: isMobile ? 'flex-start' : 'center',
       gap: spacing.lg,
-      maxWidth: 900,
-      width: '100%',
-      alignSelf: 'center',
+      paddingHorizontal: isMobile ? spacing.md : spacing.xl,
+      paddingTop: isMobile ? spacing.md : spacing.xl,
+      paddingBottom: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
     },
-    header: {
+    heroBack: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      gap: 4,
+      marginBottom: isMobile ? spacing.sm : 0,
     },
-    title: {
-      fontFamily: fonts.extraBold,
-      fontSize: isMobile ? fontSize.xxl : fontSize.xxxl,
-      color: colors.textPrimary,
-    },
-    freeLimitRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      alignItems: 'center',
-      backgroundColor: colors.bgElevated,
-      borderRadius: radius.lg,
-      padding: spacing.md,
-      gap: 2,
-    },
-    freeLimitText: {
+    heroBackText: {
       fontFamily: fonts.regular,
       fontSize: fontSize.sm,
-      color: colors.textSecondary,
+      color: colors.textMuted,
     },
-    freeLimitLink: {
-      fontFamily: fonts.semiBold,
-      fontSize: fontSize.sm,
-      color: colors.primary,
-    },
-    grid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: spacing.md,
-    },
-    card: {
-      width: isMobile ? '100%' : ('48%' as any),
-    },
-    cardInner: { gap: spacing.sm },
-    cardThumb: {
-      width: '100%',
-      height: 100,
-      borderRadius: radius.md,
-      backgroundColor: colors.primaryBg,
+    heroCover: {
+      width: isMobile ? 72 : 96,
+      height: isMobile ? 72 : 96,
+      borderRadius: radius.xl,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: spacing.xs,
+      flexShrink: 0,
     },
-    cardTrackTitle: {
-      fontFamily: fonts.bold,
-      fontSize: fontSize.md,
+    heroCoverLetter: {
+      fontFamily: fonts.extraBold,
+      fontSize: isMobile ? 32 : 42,
+      color: 'rgba(255,255,255,0.9)',
+    },
+    heroMeta: { flex: 1, gap: 4 },
+    heroTitle: {
+      fontFamily: fonts.extraBold,
+      fontSize: isMobile ? fontSize.xl : fontSize.xxl,
       color: colors.textPrimary,
     },
-    cardArtist: {
+    heroArtist: {
       fontFamily: fonts.regular,
-      fontSize: fontSize.sm,
+      fontSize: fontSize.md,
       color: colors.textSecondary,
     },
-    cardMeta: {
+    heroStats: {
       flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+      gap: spacing.md,
       marginTop: spacing.xs,
     },
-    cardBadges: { flexDirection: 'row', gap: spacing.xs },
-    viewBtn: {
+    heroStat: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
     },
-    viewBtnText: {
-      fontFamily: fonts.semiBold,
-      fontSize: fontSize.sm,
-      color: colors.primary,
+    heroStatText: {
+      fontFamily: fonts.regular,
+      fontSize: fontSize.xs,
+      color: colors.textMuted,
     },
-    emptyInner: {
+    heroActions: { gap: spacing.sm },
+
+    // Section header
+    sectionHeader: {
+      flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.md,
-      paddingTop: spacing.xxl,
-      paddingBottom: spacing.xxl,
+      justifyContent: 'space-between',
+      paddingHorizontal: isMobile ? spacing.md : spacing.xl,
+      paddingTop: spacing.xl,
+      paddingBottom: spacing.md,
     },
-    emptyIconBox: {
-      width: 80,
-      height: 80,
-      borderRadius: radius.full,
-      backgroundColor: colors.primaryBg,
+    sectionTitle: {
+      fontFamily: fonts.bold,
+      fontSize: fontSize.lg,
+      color: colors.textPrimary,
+    },
+
+    // Video cards list
+    videoList: {
+      paddingHorizontal: isMobile ? spacing.md : spacing.xl,
+      gap: spacing.md,
+    },
+    videoCard: {
+      backgroundColor: colors.bg,
+      borderRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: 'hidden',
+    },
+    videoCardTop: {
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: spacing.md,
+      padding: spacing.md,
+    },
+    thumbArea: {
+      width: isMobile ? '100%' : 140,
+      aspectRatio: 9 / 16,
+      borderRadius: radius.lg,
+      backgroundColor: colors.bgElevated,
+      overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
+      flexShrink: 0,
     },
-    emptyTitle: { fontFamily: fonts.bold, fontSize: fontSize.xl, color: colors.textPrimary },
-    emptySubtitle: {
-      fontFamily: fonts.regular,
+    videoMeta: { flex: 1, gap: spacing.sm, justifyContent: 'center' },
+    videoLabel: {
+      fontFamily: fonts.bold,
       fontSize: fontSize.md,
+      color: colors.textPrimary,
+    },
+    videoDate: {
+      fontFamily: fonts.regular,
+      fontSize: fontSize.xs,
+      color: colors.textMuted,
+    },
+    videoStatusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+
+    // Performance stats row
+    perfRow: {
+      flexDirection: 'row',
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      gap: spacing.xl,
+    },
+    perfStat: { alignItems: 'center', gap: 2 },
+    perfValue: {
+      fontFamily: fonts.bold,
+      fontSize: fontSize.md,
+      color: colors.textPrimary,
+    },
+    perfLabel: {
+      fontFamily: fonts.regular,
+      fontSize: fontSize.xs,
+      color: colors.textMuted,
+    },
+
+    // Launch bar
+    launchBar: {
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: spacing.sm,
+      padding: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      alignItems: isMobile ? 'stretch' : 'center',
+    },
+    launchLabel: {
+      fontFamily: fonts.semiBold,
+      fontSize: fontSize.sm,
+      color: colors.textSecondary,
+      flex: isMobile ? undefined : 1,
+    },
+    platformBtns: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      flexWrap: 'wrap',
+    },
+    platformBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 8,
+      paddingHorizontal: spacing.md,
+      borderRadius: radius.full,
+      borderWidth: 1,
+    },
+    platformBtnLabel: {
+      fontFamily: fonts.semiBold,
+      fontSize: fontSize.sm,
+    },
+
+    // Empty state
+    empty: {
+      alignItems: 'center',
+      paddingVertical: spacing.xxxl,
+      gap: spacing.md,
+      paddingHorizontal: spacing.xl,
+    },
+    emptyText: {
+      fontFamily: fonts.bold,
+      fontSize: fontSize.lg,
+      color: colors.textPrimary,
+    },
+    emptySubtext: {
+      fontFamily: fonts.regular,
+      fontSize: fontSize.sm,
       color: colors.textSecondary,
       textAlign: 'center',
-      maxWidth: 340,
-      lineHeight: 22,
     },
-    muted: { color: colors.textMuted, fontFamily: fonts.regular },
-    errorText: { color: colors.error, fontSize: fontSize.sm },
+
+    muted: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
+    errorText: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.error },
   });
 
-function statusVariant(status: string): 'default' | 'success' | 'warning' | 'info' {
-  if (status === 'LAUNCHED') return 'success';
-  if (status === 'READY') return 'info';
-  if (status === 'GENERATING') return 'warning';
-  return 'default';
-}
+// ─── Video card ───────────────────────────────────────────────────────────────
 
-function statusLabel(status: string, t: (k: string) => string): string {
-  if (status === 'LAUNCHED') return t('dashboard.badgeLaunched');
-  if (status === 'READY') return t('dashboard.badgeReady');
-  if (status === 'GENERATING') return t('dashboard.badgeGenerating');
-  return status;
-}
-
-function campaignIcon(hasAd: boolean): keyof typeof Ionicons.glyphMap {
-  return hasAd ? 'film-outline' : 'musical-note-outline';
-}
-
-function CampaignCard({ campaign, colors, isMobile }: { campaign: Campaign; colors: ColorPalette; isMobile: boolean }) {
-  const { t } = useTranslation();
+function VideoCard({
+  campaign,
+  index,
+  colors,
+  isMobile,
+}: {
+  campaign: Campaign;
+  index: number;
+  colors: ColorPalette;
+  isMobile: boolean;
+}) {
   const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
+  const ad = campaign.generatedAd;
+  const isLaunched = campaign.status === 'LAUNCHED';
+
+  const createdAt = campaign.createdAt
+    ? new Date(campaign.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
 
   return (
-    <Link href={`/(app)/campaigns/${campaign.id}` as any} asChild>
-      <TouchableOpacity style={styles.card} activeOpacity={0.8}>
-        <Card padding="md">
-          <View style={styles.cardInner}>
-            <View style={styles.cardThumb}>
-              <Ionicons name={campaignIcon(!!campaign.generatedAd)} size={32} color={colors.primary} />
-            </View>
-            <Text style={styles.cardTrackTitle} numberOfLines={1}>{campaign.trackTitle}</Text>
-            <Text style={styles.cardArtist} numberOfLines={1}>{campaign.artistName}</Text>
-            <View style={styles.cardMeta}>
-              <View style={styles.cardBadges}>
-                <Badge label={statusLabel(campaign.status, t)} variant={statusVariant(campaign.status)} />
-                {campaign.generatedAd && (
-                  <Badge
-                    label={t('campaigns.adsCount', { count: 1 })}
-                    variant="default"
-                  />
-                )}
-              </View>
-              <View style={styles.viewBtn}>
-                <Text style={styles.viewBtnText}>{t('campaigns.view')}</Text>
-                <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-              </View>
-            </View>
+    <View style={styles.videoCard}>
+      <View style={styles.videoCardTop}>
+        {/* Thumbnail */}
+        <View style={styles.thumbArea}>
+          {ad?.videoUrl ? (
+            <AdVideoThumb
+              videoUrl={ad.videoUrl}
+              fallback={<Ionicons name="film-outline" size={28} color={colors.textMuted} />}
+            />
+          ) : (
+            <Ionicons name="film-outline" size={28} color={colors.textMuted} />
+          )}
+        </View>
+
+        {/* Meta */}
+        <View style={styles.videoMeta}>
+          <Text style={styles.videoLabel}>Vidéo {index + 1}</Text>
+          {createdAt && <Text style={styles.videoDate}>Créée le {createdAt}</Text>}
+          <View style={styles.videoStatusRow}>
+            <Badge label={statusLabel(campaign.status)} variant={statusVariant(campaign.status)} />
+            {campaign.metaCampaignId && (
+              <Badge label="Meta" variant="info" />
+            )}
           </View>
-        </Card>
-      </TouchableOpacity>
-    </Link>
-  );
-}
-
-export default function CampaignsScreen() {
-  const { data, loading, error } = useQuery(ME_QUERY);
-  const { colors } = useTheme();
-  const { t } = useTranslation();
-  const isMobile = useIsMobile();
-  const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
-
-  const user = data?.me;
-  const campaigns: Campaign[] = user?.campaigns ?? [];
-
-  return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('campaigns.title')}</Text>
-        <Button
-          label={t('campaigns.newCampaign')}
-          onPress={() => router.push('/(app)/campaigns/new')}
-          size="sm"
-        />
+          {/* Quick actions */}
+          <View style={{ flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap', marginTop: spacing.xs }}>
+            {ad?.videoUrl && (
+              <TouchableOpacity
+                onPress={() => typeof window !== 'undefined' && window.open(ad.videoUrl!, '_blank')}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="download-outline" size={14} color={colors.primary} />
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.primary }}>
+                  Télécharger
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!isLaunched && (
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: '/(app)/campaigns/[id]',
+                    params: { id: campaign.id },
+                  } as any)
+                }
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="create-outline" size={14} color={colors.textMuted} />
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.textMuted }}>
+                  Détails
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </View>
 
-      {user?.plan === 'FREE' && campaigns.length >= 1 && (
-        <View style={styles.freeLimitRow}>
-          <Text style={styles.freeLimitText}>{t('campaigns.freePlanLimit')}</Text>
-          <Link href="/(app)/settings" asChild>
-            <TouchableOpacity>
-              <Text style={styles.freeLimitLink}>{t('campaigns.freePlanUpgrade')}</Text>
-            </TouchableOpacity>
-          </Link>
-          <Text style={styles.freeLimitText}>{t('campaigns.freePlanLimitSuffix')}</Text>
+      {/* Performance stats (if launched) */}
+      {isLaunched && (
+        <View style={styles.perfRow}>
+          <View style={styles.perfStat}>
+            <Text style={styles.perfValue}>—</Text>
+            <Text style={styles.perfLabel}>Vues</Text>
+          </View>
+          <View style={styles.perfStat}>
+            <Text style={styles.perfValue}>—</Text>
+            <Text style={styles.perfLabel}>CTR</Text>
+          </View>
+          <View style={styles.perfStat}>
+            <Text style={styles.perfValue}>—</Text>
+            <Text style={styles.perfLabel}>Clics</Text>
+          </View>
+          <View style={styles.perfStat}>
+            <Text style={styles.perfValue}>—</Text>
+            <Text style={styles.perfLabel}>Budget dépensé</Text>
+          </View>
         </View>
       )}
 
-      {loading ? <Text style={styles.muted}>{t('common.loading')}</Text> : null}
-      {error ? <Text style={styles.errorText}>{t('dashboard.errorLoad')}</Text> : null}
+      {/* Launch bar */}
+      {!isLaunched && ad && (
+        <View style={styles.launchBar}>
+          <Text style={styles.launchLabel}>Lancer la pub sur :</Text>
+          <View style={styles.platformBtns}>
+            {/* Meta */}
+            <TouchableOpacity
+              style={[
+                styles.platformBtn,
+                { borderColor: '#1877F2', backgroundColor: 'rgba(24,119,242,0.08)' },
+              ]}
+              onPress={() =>
+                router.push({
+                  pathname: '/(app)/campaigns/[id]',
+                  params: { id: campaign.id },
+                } as any)
+              }
+              activeOpacity={0.8}
+            >
+              <Ionicons name="logo-facebook" size={16} color="#1877F2" />
+              <Text style={[styles.platformBtnLabel, { color: '#1877F2' }]}>Meta / Instagram</Text>
+            </TouchableOpacity>
 
-      {!loading && campaigns.length === 0 ? (
-        <View style={styles.emptyInner}>
-          <View style={styles.emptyIconBox}>
-            <Ionicons name="film-outline" size={36} color={colors.primary} />
+            {/* TikTok */}
+            <TouchableOpacity
+              style={[
+                styles.platformBtn,
+                { borderColor: colors.border, backgroundColor: colors.bgElevated },
+              ]}
+              activeOpacity={0.8}
+              onPress={() => {}}
+            >
+              <Ionicons name="logo-tiktok" size={16} color={colors.textSecondary} />
+              <Text style={[styles.platformBtnLabel, { color: colors.textSecondary }]}>TikTok</Text>
+              <View
+                style={{
+                  backgroundColor: colors.warningBg,
+                  borderRadius: radius.full,
+                  paddingHorizontal: 6,
+                  paddingVertical: 1,
+                }}
+              >
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: 10, color: colors.warning }}>
+                  Bientôt
+                </Text>
+              </View>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.emptyTitle}>{t('campaigns.emptyTitle')}</Text>
-          <Text style={styles.emptySubtitle}>{t('campaigns.emptySubtitle')}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
+export default function TrackDetailScreen() {
+  const { track: trackParam } = useLocalSearchParams<{ track?: string }>();
+  const { data, loading, error } = useQuery(ME_QUERY);
+  const { colors } = useTheme();
+  const isMobile = useIsMobile();
+  const styles = useMemo(() => makeStyles(colors, isMobile), [colors, isMobile]);
+
+  const allCampaigns: Campaign[] = data?.me?.campaigns ?? [];
+
+  const { trackTitle, artistName, campaigns } = useMemo(() => {
+    if (!trackParam) return { trackTitle: '', artistName: '', campaigns: allCampaigns };
+    const decoded = decodeURIComponent(trackParam);
+    const [title, artist] = decoded.split('|||');
+    const filtered = allCampaigns.filter(
+      (c) => c.trackTitle === title && c.artistName === artist
+    );
+    return { trackTitle: title ?? '', artistName: artist ?? '', campaigns: filtered };
+  }, [trackParam, allCampaigns]);
+
+  const accent = trackTitle ? trackAccentColor(trackTitle) : colors.primary;
+  const launchedCount = campaigns.filter((c) => c.status === 'LAUNCHED').length;
+
+  if (loading) {
+    return (
+      <ScrollView style={styles.root} contentContainerStyle={styles.container}>
+        <Text style={[styles.muted, { padding: spacing.xl }]}>{`Chargement…`}</Text>
+      </ScrollView>
+    );
+  }
+
+  if (error) {
+    return (
+      <ScrollView style={styles.root} contentContainerStyle={styles.container}>
+        <Text style={[styles.errorText, { padding: spacing.xl }]}>Erreur de chargement.</Text>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.root} contentContainerStyle={styles.container}>
+      {/* Hero */}
+      <View style={styles.hero}>
+        <View style={{ flex: 1 }}>
+          <TouchableOpacity
+            style={styles.heroBack}
+            onPress={() => router.replace('/(app)/dashboard')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={14} color={colors.textMuted} />
+            <Text style={styles.heroBackText}>Mes musiques</Text>
+          </TouchableOpacity>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm }}>
+            <View style={[styles.heroCover, { backgroundColor: accent }]}>
+              <Text style={styles.heroCoverLetter}>
+                {trackTitle ? trackTitle.charAt(0).toUpperCase() : '?'}
+              </Text>
+            </View>
+
+            <View style={styles.heroMeta}>
+              <Text style={styles.heroTitle} numberOfLines={1}>{trackTitle || 'Toutes les vidéos'}</Text>
+              {artistName ? <Text style={styles.heroArtist}>{artistName}</Text> : null}
+              <View style={styles.heroStats}>
+                <View style={styles.heroStat}>
+                  <Ionicons name="film-outline" size={12} color={colors.textMuted} />
+                  <Text style={styles.heroStatText}>
+                    {campaigns.length} vidéo{campaigns.length > 1 ? 's' : ''}
+                  </Text>
+                </View>
+                {launchedCount > 0 && (
+                  <View style={styles.heroStat}>
+                    <Ionicons name="rocket-outline" size={12} color={colors.success} />
+                    <Text style={[styles.heroStatText, { color: colors.success }]}>
+                      {launchedCount} lancée{launchedCount > 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <Button
+          label="+ Nouvelle vidéo pour ce titre"
+          size="sm"
+          onPress={() => router.push('/(app)/campaigns/new')}
+        />
+      </View>
+
+      {/* Videos list */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Vidéos promo</Text>
+      </View>
+
+      {campaigns.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyText}>Aucune vidéo encore</Text>
+          <Text style={styles.emptySubtext}>
+            Crée une première vidéo promo pour ce morceau.
+          </Text>
           <Button
-            label={t('campaigns.createCampaign')}
+            label="Créer une vidéo promo"
             onPress={() => router.push('/(app)/campaigns/new')}
           />
         </View>
       ) : (
-        <View style={styles.grid}>
-          {campaigns.map((campaign: Campaign) => (
-            <CampaignCard key={campaign.id} campaign={campaign} colors={colors} isMobile={isMobile} />
+        <View style={styles.videoList}>
+          {campaigns.map((campaign, i) => (
+            <VideoCard
+              key={campaign.id}
+              campaign={campaign}
+              index={i}
+              colors={colors}
+              isMobile={isMobile}
+            />
           ))}
         </View>
       )}

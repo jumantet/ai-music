@@ -4,6 +4,7 @@ import { campaignResolvers } from './campaign';
 import { metaAdsResolvers } from './metaAds';
 import { billingResolvers } from './billing';
 import { spotifyResolvers } from './spotify';
+import { streamingTrackResolvers } from './streamingTrack';
 import { trackResolvers } from './track';
 
 function mergeResolvers(...resolverSets: Record<string, Record<string, unknown>>[]) {
@@ -23,5 +24,6 @@ export const resolvers = mergeResolvers(
   metaAdsResolvers,
   billingResolvers,
   spotifyResolvers,
+  streamingTrackResolvers,
   trackResolvers
 );

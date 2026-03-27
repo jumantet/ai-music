@@ -242,9 +242,9 @@ export default function CampaignDetailScreen() {
         {
           text: t('common.delete'),
           style: 'destructive',
-          onPress: async () => {
+            onPress: async () => {
             await deleteCampaign({ variables: { id } });
-            router.replace('/(app)/campaigns');
+            router.replace('/(app)/dashboard');
           },
         },
       ]
@@ -297,7 +297,16 @@ export default function CampaignDetailScreen() {
       {/* Header */}
       <View style={styles.topRow}>
         <View style={styles.topLeft}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(app)/campaigns')} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() =>
+              router.push({
+                pathname: '/(app)/campaigns',
+                params: { track: encodeURIComponent(`${campaign.trackTitle}|||${campaign.artistName}`) },
+              } as any)
+            }
+            activeOpacity={0.7}
+          >
             <Ionicons name="arrow-back" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
           <View style={styles.titleBlock}>

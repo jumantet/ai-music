@@ -3,6 +3,8 @@ import type { AuthContext } from '../../middleware/auth';
 import {
   getAppAccessToken,
   fetchTracksForArtist,
+  fetchSpotifyTrackById,
+  parseSpotifyTrackIdFromInput,
   searchSpotifyArtists,
 } from '../../services/spotify';
 
@@ -40,6 +42,22 @@ export const spotifyResolvers = {
       const cap = Math.min(Math.max(limit ?? 100, 1), 200);
       const tracks = await fetchTracksForArtist(accessToken, id, cap);
       return tracks.map(({ previewUrl: _p, ...rest }) => rest);
+    },
+
+    spotifyTrackFromUrl: async (
+      _: unknown,
+      { url }: { url: string },
+      ctx: AuthContext
+    ) => {
+      requireAuth(ctx.user);
+      requireVerified(ctx.user);
+      const trackId = parseSpotifyTrackIdFromInput(url);
+      if (!trackId) return null;
+      const accessToken = await getAppAccessToken();
+      const track = await fetchSpotifyTrackById(accessToken, trackId);
+      if (!track) return null;
+      const { previewUrl: _p, ...rest } = track;
+      return rest;
     },
   },
 };

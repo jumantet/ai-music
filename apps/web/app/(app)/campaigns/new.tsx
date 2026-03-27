@@ -14,7 +14,7 @@ import {
   TextInput,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMutation, useQuery, useApolloClient } from '@apollo/client';
+import { useMutation, useQuery, useLazyQuery, useApolloClient } from '@apollo/client';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import {
@@ -22,7 +22,6 @@ import {
   UPDATE_CAMPAIGN_MUTATION,
   GENERATE_ADS_MUTATION,
   GET_UPLOAD_URL_MUTATION,
-  LINK_SPOTIFY_ARTIST_MUTATION,
   SYNC_MY_CATALOG_TRACKS_MUTATION,
 } from '../../../src/graphql/mutations';
 import { useMutation as useResendMutation } from '@apollo/client';
@@ -34,8 +33,9 @@ import {
   CAMPAIGN_QUERY,
   ME_QUERY,
   MY_CATALOG_TRACKS_QUERY,
+  STREAMING_TRACK_FROM_URL_QUERY,
 } from '../../../src/graphql/queries';
-import { Button, Card, LinkSpotifyArtistModal } from '../../../src/components/ui';
+import { Button, Card } from '../../../src/components/ui';
 import { VideoEditorStep, DEFAULT_EDITOR_SETTINGS } from '../../../src/components/ui/VideoEditorStep';
 import type { VideoEditorSettings } from '../../../src/components/ui/VideoEditorStep';
 import { useTheme } from '../../../src/hooks/useTheme';
@@ -44,8 +44,16 @@ import { spacing, fontSize, radius, fonts } from '../../../src/theme';
 import type { ColorPalette } from '../../../src/theme';
 import type { HookSuggestion } from '@toolkit/shared';
 
-type WizardStep = 1 | 4 | 5 | 6;
-const WIZARD_STEPS: WizardStep[] = [1, 4, 5, 6];
+type WizardStep = 1 | 2 | 3 | 4 | 5;
+const WIZARD_STEPS: WizardStep[] = [1, 2, 3, 4, 5];
+
+type StockVideoOption = {
+  id: string;
+  previewUrl: string;
+  url: string;
+  thumbnailUrl: string;
+  photographer: string;
+};
 
 function normalizeHookEnergy(h: {
   start: number;
@@ -426,7 +434,8 @@ export default function NewCampaignScreen() {
   const params = useLocalSearchParams<{ editCampaignId?: string }>();
   const editCampaignId = params.editCampaignId ?? null;
 
-  const styles = useMemo(() => makeStyles(colors, isMobile, 0), [colors, isMobile]);
+  const videoThumbW = isMobile ? 152 : 168;
+  const styles = useMemo(() => makeStyles(colors, isMobile, videoThumbW), [colors, isMobile, videoThumbW]);
 
   const [step, setStep] = useState<WizardStep>(1);
   const apolloClient = useApolloClient();
@@ -442,7 +451,9 @@ export default function NewCampaignScreen() {
   const [pickedSpotifyCoverUrl, setPickedSpotifyCoverUrl] = useState<string | null>(null);
   const [spotifyModalVisible, setSpotifyModalVisible] = useState(false);
   const [trackPickerFilter, setTrackPickerFilter] = useState('');
-  const [artistLinkModalOpen, setArtistLinkModalOpen] = useState(false);
+  const [streamingUrlInput, setStreamingUrlInput] = useState('');
+  const [stockVideoOptions, setStockVideoOptions] = useState<StockVideoOption[]>([]);
+  const [selectedStockVideoId, setSelectedStockVideoId] = useState<string | null>(null);
   const initialCatalogSyncDone = useRef(false);
   const [campaignId, setCampaignId] = useState<string | null>(null);
 
@@ -483,7 +494,7 @@ export default function NewCampaignScreen() {
       }
       if (c.editorSettings) setEditorSettings({ ...DEFAULT_EDITOR_SETTINGS, ...c.editorSettings });
       setEditLoaded(true);
-      setStep(4);
+      setStep(3);
     },
   });
 
@@ -533,7 +544,7 @@ export default function NewCampaignScreen() {
   const [generateAds, { loading: generating }] = useMutation(GENERATE_ADS_MUTATION);
   const [getUploadUrl] = useMutation(GET_UPLOAD_URL_MUTATION);
 
-  const { data: meData, refetch: refetchMe } = useQuery(ME_QUERY, {
+  const { data: meData } = useQuery(ME_QUERY, {
     skip: Boolean(editCampaignId),
   });
   const spotifyArtistId = meData?.me?.spotifyArtistId ?? null;
@@ -550,7 +561,11 @@ export default function NewCampaignScreen() {
   const catalogTracks = catalogQueryData?.myCatalogTracks ?? [];
 
   const [syncCatalogTracks, { loading: syncingCatalog }] = useMutation(SYNC_MY_CATALOG_TRACKS_MUTATION);
-  const [linkSpotifyArtist, { loading: linkingArtist }] = useMutation(LINK_SPOTIFY_ARTIST_MUTATION);
+
+  const [fetchStreamingTrackFromUrl, { loading: fetchingStreamingTrack }] = useLazyQuery(
+    STREAMING_TRACK_FROM_URL_QUERY,
+    { fetchPolicy: 'network-only' }
+  );
 
   const filteredCatalogTracks = useMemo(() => {
     const f = trackPickerFilter.trim().toLowerCase();
@@ -574,17 +589,6 @@ export default function NewCampaignScreen() {
       await refetchCatalogTracks();
     })();
   }, [editCampaignId, step, spotifyArtistId, meData?.me?.emailVerified, syncCatalogTracks, refetchCatalogTracks]);
-
-  const handleArtistLinkedForCampaign = useCallback(
-    async (a: { id: string; name: string }) => {
-      await linkSpotifyArtist({ variables: { spotifyArtistId: a.id, spotifyArtistName: a.name } });
-      setArtistLinkModalOpen(false);
-      initialCatalogSyncDone.current = true;
-      await refetchMe();
-      await refetchCatalogTracks();
-    },
-    [linkSpotifyArtist, refetchMe, refetchCatalogTracks]
-  );
 
   function closeSpotifyCatalogModal() {
     setSpotifyModalVisible(false);
@@ -621,12 +625,16 @@ export default function NewCampaignScreen() {
 
   const STEP_LABELS = [
     t('campaigns.new.wizardStepTrack'),
+    t('campaigns.new.wizardStepVideoPick'),
     t('campaigns.new.wizardStepEditor'),
-    t('campaigns.new.step5'),
-    t('campaigns.new.step6'),
+    t('campaigns.new.wizardStepGenerate'),
+    t('campaigns.new.wizardStepExport'),
   ];
 
-  async function prepareVisualsAndHooksForEditor(campaignId: string, s3Key: string) {
+  async function prepareVisualsAndHooksForEditor(
+    campaignId: string,
+    s3Key: string
+  ): Promise<{ videoCount: number }> {
     try {
       const [hooksResult, moodResult] = await Promise.all([
         apolloClient.query({
@@ -673,6 +681,18 @@ export default function NewCampaignScreen() {
         videos = videosRes.data?.searchVideosForMood?.videos ?? [];
       }
 
+      const mapped: StockVideoOption[] = videos.map(
+        (v: { id: string; previewUrl: string; url: string; thumbnailUrl: string; photographer: string }) => ({
+          id: v.id,
+          previewUrl: v.previewUrl,
+          url: v.url,
+          thumbnailUrl: v.thumbnailUrl,
+          photographer: v.photographer,
+        })
+      );
+      setStockVideoOptions(mapped);
+      setSelectedStockVideoId(mapped[0]?.id ?? null);
+
       const first = videos[0];
       const previewUrl = first?.previewUrl || first?.url || null;
 
@@ -696,8 +716,11 @@ export default function NewCampaignScreen() {
           trackS3Key: s3Key || undefined,
         },
       });
+      return { videoCount: videos.length };
     } catch (e) {
       console.warn('[wizard] prepareVisualsAndHooksForEditor', e);
+      setStockVideoOptions([]);
+      setSelectedStockVideoId(null);
       const fallback = normalizeHookEnergy({ start: 0, end: 15, label: 'intro', energy: 'chorus' });
       await updateCampaign({
         variables: {
@@ -707,6 +730,7 @@ export default function NewCampaignScreen() {
           trackS3Key: s3Key || undefined,
         },
       }).catch(() => {});
+      return { videoCount: 0 };
     }
   }
 
@@ -751,12 +775,8 @@ export default function NewCampaignScreen() {
   }
 
   async function handleStep1Continue() {
-    if (!pickedSpotifyTrackId) {
-      setError(t('campaigns.new.errorSpotifyRequired'));
-      return;
-    }
     if (!trackTitle.trim() || !artistName.trim()) {
-      setError(t('campaigns.new.errorRequired'));
+      setError(t('campaigns.new.errorStreamingMetadataRequired'));
       return;
     }
     if (!pendingTrackFile) {
@@ -786,7 +806,7 @@ export default function NewCampaignScreen() {
 
       setUploadStepIdx(2);
       animateProgressTo(88, 2800);
-      await prepareVisualsAndHooksForEditor(id, s3Key);
+      const { videoCount } = await prepareVisualsAndHooksForEditor(id, s3Key);
 
       setUploadStepIdx(3);
       animateProgressTo(100, 400);
@@ -794,7 +814,7 @@ export default function NewCampaignScreen() {
       await new Promise((r) => setTimeout(r, 400));
       setUploadOverlay(false);
       clearProgressInterval();
-      setStep(4);
+      setStep(videoCount === 0 ? 3 : 2);
     } catch (err: unknown) {
       setUploadOverlay(false);
       clearProgressInterval();
@@ -810,9 +830,54 @@ export default function NewCampaignScreen() {
     }
   }
 
-  // Step 4 → 5 : editor confirmed, go to generate
-  function handleStep4Continue() {
-    setStep(5);
+  async function handleResolveStreamingUrl() {
+    if (Platform.OS !== 'web') return;
+    setError(null);
+    const url = streamingUrlInput.trim();
+    if (!url) {
+      setError(t('campaigns.new.streamingUrlEmpty'));
+      return;
+    }
+    const { data, error: qErr } = await fetchStreamingTrackFromUrl({ variables: { url } });
+    const gqlErrors = qErr?.graphQLErrors ?? [];
+    if (gqlErrors.some((e) => (e.extensions as { code?: string } | undefined)?.code === 'EMAIL_NOT_VERIFIED')) {
+      setShowVerifModal(true);
+      return;
+    }
+    if (qErr) {
+      setError(t('campaigns.new.streamingUrlFetchError'));
+      return;
+    }
+    const tr = data?.streamingTrackFromUrl;
+    if (!tr) {
+      setError(t('campaigns.new.streamingUrlNotFound'));
+      return;
+    }
+    setTrackTitle(tr.name);
+    setArtistName(tr.artistName);
+    setPickedSpotifyTrackId(tr.spotifyTrackId ?? null);
+    setPickedSpotifyCoverUrl(tr.albumImageUrl ?? null);
+  }
+
+  async function handleStep2Continue() {
+    if (!campaignId) return;
+    setError(null);
+    const sel =
+      stockVideoOptions.find((v) => v.id === selectedStockVideoId) ?? stockVideoOptions[0];
+    const previewUrl = sel?.previewUrl || sel?.url || null;
+    if (previewUrl) {
+      setSelectedPreviewUrls([previewUrl]);
+      try {
+        await updateCampaign({ variables: { id: campaignId, videoUrl: previewUrl } });
+      } catch {
+        /* non-bloquant */
+      }
+    }
+    setStep(3);
+  }
+
+  function handleEditorContinue() {
+    setStep(4);
     simulateGenerate();
   }
 
@@ -1188,21 +1253,12 @@ export default function NewCampaignScreen() {
           </TouchableWithoutFeedback>
         </Modal>
 
-        <LinkSpotifyArtistModal
-          visible={artistLinkModalOpen}
-          onClose={() => setArtistLinkModalOpen(false)}
-          onSelectArtist={(a) => {
-            void handleArtistLinkedForCampaign(a).catch((e) => alert((e as Error).message));
-          }}
-          linking={linkingArtist}
-          colors={colors}
-        />
       </>
     );
   }
 
   const pageHeader = (
-    <View style={step === 4 ? styles.editorPageHeader : undefined}>
+    <View style={step === 3 ? styles.editorPageHeader : undefined}>
       {/* Header */}
       <View style={styles.topRow}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
@@ -1261,7 +1317,7 @@ export default function NewCampaignScreen() {
     />
   );
 
-  if (step === 4) {
+  if (step === 3) {
     const fabLabel = t('campaigns.new.continueBtn');
 
     /** Bouton HTML natif : RN Web ne garantit pas `position:fixed` sur TouchableOpacity. */
@@ -1274,7 +1330,7 @@ export default function NewCampaignScreen() {
                 type: 'button',
                 onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
                   e.preventDefault();
-                  handleStep4Continue();
+                  handleEditorContinue();
                 },
                 style: {
                   position: 'fixed',
@@ -1313,7 +1369,7 @@ export default function NewCampaignScreen() {
           <View style={styles.editorStep4FabOverlay} pointerEvents="box-none">
             <TouchableOpacity
               style={[styles.editorStep4Fab, { backgroundColor: colors.primary }]}
-              onPress={handleStep4Continue}
+              onPress={handleEditorContinue}
               activeOpacity={0.88}
             >
               <Text style={[styles.editorStep4FabLabel, { color: colors.white }]}>{fabLabel}</Text>
@@ -1331,48 +1387,69 @@ export default function NewCampaignScreen() {
         {pageHeader}
 
       {/* ── STEP 1: Upload ── */}
-      {step === 1 && !editCampaignId && !spotifyArtistId && (
-        <Card padding="lg">
-          <View style={styles.stepCard}>
-            <Text style={styles.stepTitle}>{t('campaigns.new.artistRequiredTitle')}</Text>
-            <Text style={styles.stepSubtitle}>{t('campaigns.new.artistRequiredSubtitle')}</Text>
-            <Button
-              label={t('campaigns.new.artistRequiredBtn')}
-              onPress={() => setArtistLinkModalOpen(true)}
-              variant="secondary"
-              fullWidth
-            />
-          </View>
-        </Card>
-      )}
-
-      {step === 1 && (Boolean(editCampaignId) || Boolean(spotifyArtistId)) && (
+      {step === 1 && !editCampaignId && (
         <Card padding="lg">
           <View style={styles.stepCard}>
             <Text style={styles.stepTitle}>{t('campaigns.new.wizardTrackTitle')}</Text>
             <Text style={styles.stepSubtitle}>{t('campaigns.new.wizardTrackSubtitle')}</Text>
 
             <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-              {t('campaigns.new.wizardStepPickTrack')}
+              {t('campaigns.new.wizardStepStreamingLink')}
             </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-              <Button
-                label={
-                  pickedSpotifyTrackId ? t('campaigns.new.spotifyChangeTrackBtn') : t('campaigns.new.spotifyCatalogBtn')
-                }
-                onPress={openSpotifyCatalogModal}
-                variant="secondary"
-                style={{ flex: 1, minWidth: 160 }}
-              />
-              <Button
-                label={t('campaigns.new.catalogSyncBtn')}
-                onPress={() => void handleRefreshCatalogInModal()}
-                variant="ghost"
-                loading={syncingCatalog}
-                style={{ minWidth: 120 }}
-              />
-            </View>
-            {pickedSpotifyTrackId && trackTitle ? (
+            <TextInput
+              value={streamingUrlInput}
+              onChangeText={setStreamingUrlInput}
+              placeholder={t('campaigns.new.streamingLinkPlaceholder')}
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{
+                fontFamily: fonts.regular,
+                fontSize: fontSize.md,
+                color: colors.textPrimary,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: radius.md,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm,
+              }}
+            />
+            <Button
+              label={t('campaigns.new.streamingLinkFetchBtn')}
+              onPress={() => void handleResolveStreamingUrl()}
+              variant="secondary"
+              loading={fetchingStreamingTrack}
+              fullWidth
+            />
+            <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted, lineHeight: 18 }}>
+              {t('campaigns.new.streamingPlatformsHint')}
+            </Text>
+
+            {spotifyArtistId ? (
+              <>
+                <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: spacing.sm }}>
+                  {t('campaigns.new.wizardStepPickTrackOptional')}
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                  <Button
+                    label={
+                      trackTitle.trim() ? t('campaigns.new.catalogChangeTrackBtn') : t('campaigns.new.savedCatalogBtn')
+                    }
+                    onPress={openSpotifyCatalogModal}
+                    variant="ghost"
+                    style={{ flex: 1, minWidth: 160 }}
+                  />
+                  <Button
+                    label={t('campaigns.new.catalogSyncBtn')}
+                    onPress={() => void handleRefreshCatalogInModal()}
+                    variant="ghost"
+                    loading={syncingCatalog}
+                    style={{ minWidth: 120 }}
+                  />
+                </View>
+              </>
+            ) : null}
+            {trackTitle.trim() && artistName.trim() ? (
               <View
                 style={{
                   flexDirection: 'row',
@@ -1420,6 +1497,9 @@ export default function NewCampaignScreen() {
             <Text style={{ fontFamily: fonts.semiBold, fontSize: fontSize.xs, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: spacing.sm }}>
               {t('campaigns.new.wizardStepUploadAudio')}
             </Text>
+            <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.xs }}>
+              {t('campaigns.new.streamingAudioNote')}
+            </Text>
 
             {pendingTrackFile ? (
               <View style={styles.uploadedRow}>
@@ -1452,8 +1532,58 @@ export default function NewCampaignScreen() {
         </Card>
       )}
 
-      {/* ── STEP 5: Generate ── */}
-      {step === 5 && (
+      {/* ── STEP 2: choix du clip (stock) ── */}
+      {step === 2 && (
+        <Card padding="lg">
+          <View style={styles.stepCard}>
+            <Text style={styles.stepTitle}>{t('campaigns.new.step2VideoTitle')}</Text>
+            <Text style={styles.stepSubtitle}>{t('campaigns.new.step2VideoSubtitle')}</Text>
+
+            {stockVideoOptions.length === 0 ? (
+              <Text style={styles.muted}>{t('campaigns.new.videosNone')}</Text>
+            ) : (
+              <View style={styles.videoGrid}>
+                {stockVideoOptions.map((v) => {
+                  const selected = v.id === selectedStockVideoId;
+                  return (
+                    <TouchableOpacity
+                      key={v.id}
+                      onPress={() => setSelectedStockVideoId(v.id)}
+                      activeOpacity={0.85}
+                      style={{ width: videoThumbW + 4 }}
+                    >
+                      <View style={[styles.videoThumb, selected ? styles.videoThumbSelected : styles.videoThumbIdle]}>
+                        {v.thumbnailUrl ? (
+                          <Image
+                            source={{ uri: v.thumbnailUrl }}
+                            style={{ width: '100%', height: '100%' }}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Ionicons name="film-outline" size={28} color={colors.textMuted} />
+                        )}
+                      </View>
+                      <Text style={styles.videoCredit} numberOfLines={1}>
+                        {v.photographer}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            <View style={styles.actions}>
+              <Button
+                label={t('campaigns.new.continueBtn')}
+                onPress={() => void handleStep2Continue()}
+              />
+            </View>
+          </View>
+        </Card>
+      )}
+
+      {/* ── STEP 4: Generate ── */}
+      {step === 4 && (
         <Card padding="lg">
           <View style={styles.stepCard}>
             <Text style={styles.stepTitle}>{t('campaigns.new.generateTitle')}</Text>
@@ -1512,7 +1642,7 @@ export default function NewCampaignScreen() {
                   ))}
                 </View>
                 <View style={styles.actions}>
-                  <Button label={t('campaigns.new.continueBtn')} onPress={() => setStep(6)} />
+                  <Button label={t('campaigns.new.continueBtn')} onPress={() => setStep(5)} />
                 </View>
               </>
             )}
@@ -1520,8 +1650,8 @@ export default function NewCampaignScreen() {
         </Card>
       )}
 
-      {/* ── STEP 6: Export & Launch ── */}
-      {step === 6 && (
+      {/* ── STEP 5: Export & Launch ── */}
+      {step === 5 && (
         <Card padding="lg">
           <View style={styles.stepCard}>
             <Text style={styles.stepTitle}>{t('campaigns.new.exportTitle')}</Text>
@@ -1577,7 +1707,7 @@ export default function NewCampaignScreen() {
             </View>
 
             <View style={styles.actions}>
-              <Button label={t('common.back')} variant="secondary" onPress={() => setStep(5)} />
+              <Button label={t('common.back')} variant="secondary" onPress={() => setStep(4)} />
               <Button label={t('campaigns.new.finish')} onPress={handleFinish} />
             </View>
           </View>

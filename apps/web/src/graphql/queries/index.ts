@@ -85,6 +85,21 @@ export const SPOTIFY_ARTIST_TRACKS_QUERY = gql`
   }
 `;
 
+export const STREAMING_TRACK_FROM_URL_QUERY = gql`
+  query StreamingTrackFromUrl($url: String!) {
+    streamingTrackFromUrl(url: $url) {
+      source
+      spotifyTrackId
+      externalId
+      name
+      artistName
+      albumName
+      albumImageUrl
+      durationMs
+    }
+  }
+`;
+
 export const MY_CATALOG_TRACKS_QUERY = gql`
   query MyCatalogTracks {
     myCatalogTracks {

@@ -42,6 +42,18 @@ export const typeDefs = `#graphql
     durationMs: Int!
   }
 
+  """Métadonnées (titre, pochette…) depuis un lien streaming — pas le fichier audio."""
+  type StreamingTrackMetadata {
+    source: String!
+    spotifyTrackId: String
+    externalId: String
+    name: String!
+    artistName: String!
+    albumName: String!
+    albumImageUrl: String
+    durationMs: Int!
+  }
+
   """Morceau persisté (sync Spotify) pour l’utilisateur connecté."""
   type CatalogTrack {
     id: ID!
@@ -194,6 +206,10 @@ export const typeDefs = `#graphql
     # Recherche catalogue Spotify sans session (ex. avant login). Limite côté serveur.
     spotifySearchArtistsPublic(query: String!): [SpotifyArtist!]!
     spotifyArtistTracks(artistId: ID!, limit: Int): [SpotifyTrack!]!
+    """Métadonnées d’un morceau à partir d’une URL open.spotify.com, d’une URI ou d’un ID."""
+    spotifyTrackFromUrl(url: String!): SpotifyTrack
+    """Lien Spotify, YouTube, SoundCloud ou Apple Music → titre, artiste, pochette (audio = upload séparé)."""
+    streamingTrackFromUrl(url: String!): StreamingTrackMetadata
     myCatalogTracks: [CatalogTrack!]!
   }
 

@@ -233,6 +233,62 @@ async function fetchArtistTopTracksBrief(
   return out;
 }
 
+/**
+ * Extrait l’ID Spotify d’un lien open.spotify.com, d’une URI spotify:track:… ou d’un ID nu.
+ */
+export function parseSpotifyTrackIdFromInput(input: string): string | null {
+  const raw = input.trim();
+  if (!raw) return null;
+
+  const uri = /^spotify:track:([a-zA-Z0-9]+)$/i.exec(raw);
+  if (uri) return uri[1];
+
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+    if (host === 'open.spotify.com' || host === 'play.spotify.com') {
+      const m = /\/(?:intl-[a-z]{2}\/)?track\/([a-zA-Z0-9]+)/.exec(u.pathname);
+      if (m) return m[1];
+    }
+  } catch {
+    /* URL invalide — peut être un ID seul */
+  }
+
+  if (/^[a-zA-Z0-9]{22}$/.test(raw)) return raw;
+  return null;
+}
+
+export async function fetchSpotifyTrackById(
+  accessToken: string,
+  trackId: string
+): Promise<SpotifyTrackBrief | null> {
+  const m = encodeURIComponent(spotifyMarket());
+  const res = await fetch(`${SPOTIFY_API}/tracks/${encodeURIComponent(trackId)}?market=${m}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    return null;
+  }
+  const t = (await res.json()) as {
+    id?: string;
+    name?: string;
+    duration_ms?: number;
+    preview_url?: string | null;
+    artists?: { name: string }[];
+    album?: { name: string; images?: { url: string }[] };
+  };
+  if (!t?.id) return null;
+  return {
+    id: t.id,
+    name: t.name ?? '',
+    artistName: (t.artists ?? []).map((x) => x.name).join(', '),
+    albumName: t.album?.name ?? '',
+    albumImageUrl: pickAlbumCoverUrl(t.album?.images),
+    previewUrl: t.preview_url ?? null,
+    durationMs: t.duration_ms ?? 0,
+  };
+}
+
 export async function fetchTracksForArtist(
   accessToken: string,
   artistId: string,
