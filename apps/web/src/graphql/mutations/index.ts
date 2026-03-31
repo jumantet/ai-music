@@ -33,6 +33,7 @@ export const LOGIN_MUTATION = gql`
         name
         plan
         emailVerified
+        videoCredits
         spotifyArtistId
         spotifyArtistName
       }
@@ -50,6 +51,7 @@ export const SIGNUP_MUTATION = gql`
         name
         plan
         emailVerified
+        videoCredits
         spotifyArtistId
         spotifyArtistName
       }
@@ -110,6 +112,11 @@ export const UPDATE_CAMPAIGN_MUTATION = gql`
         textBgColor
         textBgOpacity
         textPosition
+        endCardEnabled
+        endCardDurationSec
+        endCardTitle
+        endCardShowTitle
+        endCardCoverUrl
       }
       status
     }

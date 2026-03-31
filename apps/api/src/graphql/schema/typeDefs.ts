@@ -19,6 +19,7 @@ export const typeDefs = `#graphql
     name: String!
     plan: Plan!
     emailVerified: Boolean!
+    videoCredits: Int!
     metaAdAccountId: String
     metaConnected: Boolean!
     spotifyArtistId: String
@@ -79,11 +80,17 @@ export const typeDefs = `#graphql
     textBgColor: String
     textBgOpacity: Float
     textPosition: String
+    endCardEnabled: Boolean
+    endCardDurationSec: Float
+    endCardTitle: String
+    endCardShowTitle: Boolean
+    endCardCoverUrl: String
   }
 
   type Campaign {
     id: ID!
-    userId: ID!
+    userId: ID
+    sessionId: String
     trackTitle: String!
     artistName: String!
     spotifyTrackId: String
@@ -179,6 +186,11 @@ export const typeDefs = `#graphql
     textBgColor: String
     textBgOpacity: Float
     textPosition: String
+    endCardEnabled: Boolean
+    endCardDurationSec: Float
+    endCardTitle: String
+    endCardShowTitle: Boolean
+    endCardCoverUrl: String
   }
 
   type AuthPayload {
@@ -196,9 +208,21 @@ export const typeDefs = `#graphql
     me: User!
     campaign(id: ID!): Campaign!
     campaigns: [Campaign!]!
-    suggestHooks(campaignId: ID!): [HookSuggestion!]!
-    suggestMood(campaignId: ID!): MoodSuggestion!
+    """Segments suggérés ; optionnellement guidés par la courbe RMS client (Web Audio)."""
+    suggestHooks(
+      campaignId: ID!
+      audioDurationSec: Float
+      audioEnergyEnvelope: [Float!]
+    ): [HookSuggestion!]!
+    """Ambiances visuelles ; optionnellement biaisées par la courbe RMS client (Web Audio)."""
+    suggestMood(
+      campaignId: ID!
+      audioDurationSec: Float
+      audioEnergyEnvelope: [Float!]
+    ): MoodSuggestion!
     searchVideosForMood(mood: String!, page: Int, keywords: [String!]): PexelsVideosPage!
+    """Recherche libre de clips portrait sur Pexels (texte saisi par l'utilisateur)."""
+    searchPexelsVideos(query: String!, page: Int): PexelsVideosPage!
     metaAdAccounts: [MetaAdAccount!]!
     metaPages: [MetaPage!]!
 
@@ -231,6 +255,7 @@ export const typeDefs = `#graphql
       editorSettings: EditorSettingsInput
     ): Campaign!
     deleteCampaign(id: ID!): Boolean!
+    """Consomme 1 crédit vidéo ; rattache un brouillon anonyme (session) au compte si besoin."""
     generateAds(campaignId: ID!): Campaign!
 
     getUploadUrl(campaignId: ID!, fileType: String!, contentType: String!): UploadUrlPayload!

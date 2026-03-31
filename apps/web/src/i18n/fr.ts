@@ -170,7 +170,15 @@ const fr = {
       streamingLinkPlaceholder: 'Lien YouTube, SoundCloud, Apple Music…',
       streamingLinkFetchBtn: 'Récupérer →',
       streamingPlatformsHint:
-        'Prend en charge les liens directs courants (vidéo ou audio). Si le lien n’est pas reconnu, vérifie qu’il ouvre bien la page du titre.',
+        'Spotify, Apple Music, YouTube / YouTube Music, SoundCloud, Deezer (page titre), Bandcamp (aperçu). Si le lien échoue, ouvre la page publique du morceau. Tidal : non pris en charge pour l’instant.',
+      waveformSectionTitle: 'Plage exportée sur ta waveform',
+      generateFab: 'Générer le clip',
+      loginToGenerateFab: 'Connexion pour générer',
+      insufficientCredits:
+        'Tu n’as plus de crédit vidéo pour cet export. Reviens bientôt pour acheter des packs, ou contacte-nous.',
+      audioWhyTitle: 'Pourquoi le fichier audio ?',
+      audioWhyBody:
+        'Il sert à la waveform, au choix précis du segment exporté et à l’analyse d’énergie — le lien streaming ne fournit que le titre, l’artiste et la cover.',
       streamingUrlEmpty: 'Colle d’abord le lien de ton morceau.',
       streamingUrlNotFound:
         'Impossible de lire ce lien. Utilise la page publique du titre, ou un autre service, puis réessaie.',
@@ -182,7 +190,17 @@ const fr = {
       savedCatalogBtn: 'Choisir dans mon catalogue',
       step2VideoTitle: 'Choisis ton clip vidéo',
       step2VideoSubtitle:
-        'Des visuels libres de droits ont été proposés selon l’ambiance détectée. Sélectionne celui qui va avec ta pub.',
+        'Des visuels libres de droits selon le morceau et l’analyse audio. Change d’ambiance ou recherche sur Pexels. Sélectionne le plan qui colle à ton clip.',
+      step2MoodLabel: 'Ambiance visuelle',
+      step2PexelsSearchLabel: 'Recherche',
+      step2PexelsSearchPlaceholder: 'Ex. neon city night, ocean waves…',
+      step2PexelsSearchSubmit: 'Rechercher',
+      step2PexelsSearchClear: 'Réinitialiser',
+      step2PlayPreview: 'Lire un aperçu de la vidéo',
+      step2Page: 'Page {{n}}',
+      step2PaginationA11y: 'Pagination des clips',
+      step2LoadingClips: 'Chargement des visuels…',
+      step2Back: 'Retour au morceau',
       wizardStepUploadAudio: 'Fichier audio',
       wizardPickTrackHint: 'Choisis un titre dans ton catalogue.',
       step1: 'Upload',

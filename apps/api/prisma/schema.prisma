@@ -32,6 +32,8 @@ model User {
   metaAdAccountId  String?
   spotifyArtistId   String?
   spotifyArtistName String?
+  /// Crédits export vidéo (1 crédit = 1 génération). Défaut 1 à l’inscription.
+  videoCredits     Int        @default(1)
   campaigns        Campaign[]
   tracks           Track[]
   createdAt        DateTime   @default(now())
@@ -57,8 +59,11 @@ model Track {
 
 model Campaign {
   id             String         @id @default(cuid())
-  userId         String
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Null tant que brouillon anonyme (sessionId) ; renseigné à la génération ou liaison compte.
+  userId         String?
+  user           User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Brouillon créé sans compte ; fusionné au userId au moment de la génération.
+  sessionId      String?
   trackTitle     String
   artistName     String
   spotifyTrackId String?
@@ -74,6 +79,8 @@ model Campaign {
   generatedAd    GeneratedAd?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+
+  @@index([sessionId])
 }
 
 model GeneratedAd {

@@ -7,6 +7,9 @@ import { getSignedDownloadUrl, uploadBuffer, getPublicUrl } from './storage';
 
 const execFileAsync = promisify(execFile);
 
+export const MIN_EXPORT_SEC = 1;
+export const MAX_EXPORT_SEC = 180;
+
 export interface AdResult {
   videoS3Key: string;
   videoUrl: string;
@@ -14,11 +17,10 @@ export interface AdResult {
 
 export interface EditorSettings {
   filterPreset?: string;
-  brightness?: number;   // 50–150, default 100
-  contrast?: number;     // 50–150, default 100
-  saturation?: number;   // 0–200, default 100
-  grain?: number;        // 0–100, default 0
-  /** Aperçu web uniquement (CSS) — ignoré par ffmpeg pour l’instant */
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  grain?: number;
   motionPreset?: string;
   text?: string;
   fontFamily?: string;
@@ -27,20 +29,33 @@ export interface EditorSettings {
   textBgColor?: string;
   textBgOpacity?: number;
   textPosition?: string;
+  endCardEnabled?: boolean;
+  endCardDurationSec?: number;
+  endCardTitle?: string;
+  endCardShowTitle?: boolean;
+  endCardCoverUrl?: string;
 }
 
 const PRESET_FFMPEG: Record<string, string> = {
-  none:     '',
-  prisme:   'eq=saturation=2.2:contrast=1.25,hue=h=8',
-  super8:   'colorchannelmixer=rr=1.2:gg=1.0:bb=0.75,eq=saturation=1.25:contrast=0.85',
-  k7:       'eq=saturation=0.65:contrast=1.3,colorchannelmixer=rr=0.95:gg=1.05:bb=0.9,hue=h=168',
-  neon:     'eq=brightness=-0.35:contrast=1.6:saturation=2.8,hue=h=250',
-  dore:     'colorchannelmixer=rr=1.25:gg=1.05:bb=0.7,eq=saturation=1.9:contrast=1.05',
-  lofi:     'colorchannelmixer=rr=1.02:gg=1.0:bb=0.97,eq=saturation=0.45:contrast=0.82',
-  cobalt:   'eq=saturation=0.75:contrast=1.2,colorchannelmixer=rr=0.82:gg=0.9:bb=1.25,hue=h=202',
-  duotone:  'eq=saturation=3.5:contrast=1.35,hue=h=285',
-  matrix:   'eq=saturation=1.5:contrast=1.3,colorchannelmixer=rr=0.8:gg=1.3:bb=0.8,hue=h=100',
-  velours:  'colorchannelmixer=rr=1.1:gg=0.85:bb=1.0,eq=saturation=1.3:contrast=1.45',
+  none: '',
+  prisme: 'eq=saturation=2.2:contrast=1.25,hue=h=8',
+  super8: 'colorchannelmixer=rr=1.2:gg=1.0:bb=0.75,eq=saturation=1.25:contrast=0.85',
+  k7: 'eq=saturation=0.65:contrast=1.3,colorchannelmixer=rr=0.95:gg=1.05:bb=0.9,hue=h=168',
+  neon: 'eq=brightness=-0.35:contrast=1.6:saturation=2.8,hue=h=250',
+  dore: 'colorchannelmixer=rr=1.25:gg=1.05:bb=0.7,eq=saturation=1.9:contrast=1.05',
+  lofi: 'colorchannelmixer=rr=1.02:gg=1.0:bb=0.97,eq=saturation=0.45:contrast=0.82',
+  cobalt: 'eq=saturation=0.75:contrast=1.2,colorchannelmixer=rr=0.82:gg=0.9:bb=1.25,hue=h=202',
+  duotone: 'eq=saturation=3.5:contrast=1.35,hue=h=285',
+  matrix: 'eq=saturation=1.5:contrast=1.3,colorchannelmixer=rr=0.8:gg=1.3:bb=0.8,hue=h=100',
+  velours: 'colorchannelmixer=rr=1.1:gg=0.85:bb=1.0,eq=saturation=1.3:contrast=1.45',
+  // Curated lo-fi (preview keys alignés)
+  tape_warmth: 'colorchannelmixer=rr=1.08:gg=1.02:bb=0.94,eq=saturation=0.52:contrast=0.88:brightness=0.02',
+  dusk_room: 'eq=saturation=0.48:contrast=0.9,colorchannelmixer=rr=1.12:gg=1.0:bb=0.88,hue=h=12',
+  rain_glass: 'eq=saturation=0.42:contrast=0.95:brightness=-0.03,colorchannelmixer=rr=0.92:gg=0.98:bb=1.08,hue=h=200',
+  forest_mist: 'eq=saturation=0.55:contrast=0.84,colorchannelmixer=rr=0.9:gg=1.05:bb=0.95,hue=h=85',
+  moon_cool: 'eq=saturation=0.5:contrast=1.05:brightness=-0.04,colorchannelmixer=rr=0.88:gg=0.95:bb=1.12,hue=h=220',
+  desk_night: 'eq=saturation=0.58:contrast=0.92:brightness=0.03,colorchannelmixer=rr=1.1:gg=1.05:bb=0.82,hue=h=28',
+  soft_vhs: 'eq=saturation=0.62:contrast=0.88,colorchannelmixer=rr=1.05:gg=0.98:bb=1.02,hue=h=168',
 };
 
 export async function generateAdVariants(params: {
@@ -66,11 +81,15 @@ export async function generateAdVariants(params: {
     editorSettings = {},
   } = params;
 
-  const hookDuration = Math.min(hookEnd - hookStart, 15);
+  const rawDur = hookEnd - hookStart;
+  const hookDuration = Math.min(
+    MAX_EXPORT_SEC,
+    Math.max(MIN_EXPORT_SEC, Number.isFinite(rawDur) ? rawDur : 30)
+  );
+
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `ad-gen-${campaignId}-`));
 
   try {
-    // Download audio
     let audioPath: string | null = null;
     if (trackS3Key) {
       try {
@@ -81,10 +100,11 @@ export async function generateAdVariants(params: {
           audioPath = path.join(tmpDir, 'track.mp3');
           fs.writeFileSync(audioPath, buf);
         }
-      } catch { /* no audio */ }
+      } catch {
+        /* */
+      }
     }
 
-    // Download video: custom S3 upload takes priority over Pexels URL
     let videoPath: string | null = null;
     if (videoS3Key) {
       try {
@@ -95,7 +115,9 @@ export async function generateAdVariants(params: {
           videoPath = path.join(tmpDir, 'video.mp4');
           fs.writeFileSync(videoPath, buf);
         }
-      } catch { /* fall through */ }
+      } catch {
+        /* */
+      }
     }
     if (!videoPath && videoUrl) {
       try {
@@ -105,7 +127,25 @@ export async function generateAdVariants(params: {
           videoPath = path.join(tmpDir, 'video.mp4');
           fs.writeFileSync(videoPath, buf);
         }
-      } catch { /* fall through */ }
+      } catch {
+        /* */
+      }
+    }
+
+    let coverPath: string | null = null;
+    const ecUrl = editorSettings.endCardCoverUrl?.trim();
+    if (editorSettings.endCardEnabled && ecUrl) {
+      try {
+        const res = await fetch(ecUrl, { signal: AbortSignal.timeout(15_000) });
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          const ext = ecUrl.includes('.png') ? 'png' : 'jpg';
+          coverPath = path.join(tmpDir, `cover.${ext}`);
+          fs.writeFileSync(coverPath, buf);
+        }
+      } catch {
+        /* */
+      }
     }
 
     let outputKey = '';
@@ -117,13 +157,13 @@ export async function generateAdVariants(params: {
       artistName,
       trackTitle,
       editorSettings,
+      coverPath,
     };
     const outputPath = path.join(tmpDir, 'ad.mp4');
 
-    // 1) Vidéo + morceau → MP4 final sur R2 (comportement nominal)
     if (videoPath && audioPath) {
       try {
-        await runFfmpeg(videoPath, audioPath, outputPath, renderOpts);
+        await runFfmpegVideoAudio(videoPath, audioPath, outputPath, renderOpts);
         const outputBuf = fs.readFileSync(outputPath);
         outputKey = `campaigns/${campaignId}/ad_${Date.now()}.mp4`;
         outputUrl = await uploadBuffer(outputKey, outputBuf, 'video/mp4');
@@ -132,10 +172,9 @@ export async function generateAdVariants(params: {
       }
     }
 
-    // 2) Vidéo seule → même rendu visuel + audio silencieux, toujours uploadé sur R2
     if (!outputUrl && videoPath) {
       try {
-        await runFfmpegWithSilentAudio(videoPath, outputPath, renderOpts);
+        await runFfmpegSilent(videoPath, outputPath, renderOpts);
         const outputBuf = fs.readFileSync(outputPath);
         outputKey = `campaigns/${campaignId}/ad_${Date.now()}.mp4`;
         outputUrl = await uploadBuffer(outputKey, outputBuf, 'video/mp4');
@@ -144,7 +183,6 @@ export async function generateAdVariants(params: {
       }
     }
 
-    // Repli UI : URL source si le rendu n’a pas pu être produit sur R2
     const previewUrl =
       outputUrl ||
       (videoUrl ?? '') ||
@@ -155,13 +193,14 @@ export async function generateAdVariants(params: {
   }
 }
 
-function buildFfmpegFilterComplex(opts: {
+function buildFilterComplex(opts: {
   hookDuration: number;
   artistName: string;
   trackTitle: string;
   editorSettings: EditorSettings;
+  coverPath: string | null;
 }): string {
-  const { hookDuration, artistName, trackTitle, editorSettings } = opts;
+  const { hookDuration, artistName, trackTitle, editorSettings, coverPath } = opts;
   const {
     filterPreset = 'none',
     brightness = 100,
@@ -175,21 +214,21 @@ function buildFfmpegFilterComplex(opts: {
     textBgColor = '#000000',
     textBgOpacity = 0.5,
     textPosition = 'bottom',
+    endCardEnabled = false,
+    endCardDurationSec = 3,
+    endCardTitle = '',
+    endCardShowTitle = true,
   } = editorSettings;
 
   const filters: string[] = [];
 
-  // 1. Scale & crop to 9:16, loop to hookDuration
   filters.push(
     `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,loop=loop=-1:size=500,trim=duration=${hookDuration},setpts=PTS-STARTPTS[base]`
   );
 
-  // 2. Preset color grading
-  const presetFilter = PRESET_FFMPEG[filterPreset] ?? '';
-
-  // 3. Manual eq adjustments
+  const presetFilter = PRESET_FFMPEG[filterPreset] ?? PRESET_FFMPEG.lofi ?? '';
   const eqBrightness = ((brightness - 100) / 100).toFixed(3);
-  const eqContrast   = (contrast / 100).toFixed(3);
+  const eqContrast = (contrast / 100).toFixed(3);
   const eqSaturation = (saturation / 100).toFixed(3);
   const hasEq = brightness !== 100 || contrast !== 100 || saturation !== 100;
   const eqFilter = hasEq
@@ -199,41 +238,57 @@ function buildFfmpegFilterComplex(opts: {
   const colorChain = [presetFilter, eqFilter].filter(Boolean).join(',');
   filters.push(colorChain ? `[base]${colorChain}[colored]` : `[base]null[colored]`);
 
-  // 4. Grain
   if (grain > 0) {
     filters.push(`[colored]noise=alls=${Math.round(grain * 0.4)}:allf=t+u[grained]`);
   } else {
     filters.push(`[colored]null[grained]`);
   }
 
-  // 5. Pas de fondu (pipeline inchangé : label [faded] pour la suite)
   filters.push(`[grained]null[faded]`);
 
-  // 6. Text overlay
   const displayText = text
     ? `${escapeDrawtext(text)}\\n${escapeDrawtext(artistName)} - ${escapeDrawtext(trackTitle)}`
     : `${escapeDrawtext(artistName)} - ${escapeDrawtext(trackTitle)}`;
 
   const ffFontColor = hexToFfmpegColor(fontColor);
-  const ffBgColor = textBgColor === 'transparent' || !textBgColor
-    ? '00000000'
-    : `${hexToFfmpegColor(textBgColor)}@${textBgOpacity.toFixed(2)}`;
+  const ffBgColor =
+    textBgColor === 'transparent' || !textBgColor
+      ? '00000000'
+      : `${hexToFfmpegColor(textBgColor)}@${textBgOpacity.toFixed(2)}`;
 
   const yPos =
-    textPosition === 'top'    ? '80' :
-    textPosition === 'center' ? '(h-text_h)/2' :
-    'h-150';
+    textPosition === 'top' ? '80' : textPosition === 'center' ? '(h-text_h)/2' : 'h-150';
 
   const fontstyle = fontFamily === 'bold' ? 'Bold' : 'Normal';
 
   filters.push(
-    `[faded]drawtext=text='${displayText}':fontsize=${fontSize}:fontcolor=${ffFontColor}:x=(w-text_w)/2:y=${yPos}:box=1:boxcolor=${ffBgColor}:boxborderw=12:fontstyle=${fontstyle}[vout]`
+    `[faded]drawtext=text='${displayText}':fontsize=${fontSize}:fontcolor=${ffFontColor}:x=(w-text_w)/2:y=${yPos}:box=1:boxcolor=${ffBgColor}:boxborderw=12:fontstyle=${fontstyle}[vtxt]`
   );
+
+  const ecDur = Math.min(Math.max(0.5, endCardDurationSec), hookDuration * 0.45);
+  const ecStart = Math.max(0, hookDuration - ecDur);
+
+  if (endCardEnabled && coverPath) {
+    filters.push(
+      `[2:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,format=rgba,fade=t=in:st=${ecStart.toFixed(3)}:d=${ecDur.toFixed(3)}:alpha=1[cvf]`
+    );
+    filters.push(`[vtxt][cvf]overlay=(W-w)/2:(H-h)/2:format=auto[voc]`);
+    if (endCardShowTitle && endCardTitle.trim()) {
+      const t = escapeDrawtext(endCardTitle.trim());
+      filters.push(
+        `[voc]drawtext=text='${t}':fontsize=56:fontcolor=FFFFFF:x=(w-text_w)/2:y=h-200:box=1:boxcolor=00000080:boxborderw=16:enable='between(t\\,${ecStart.toFixed(3)}\\,${hookDuration.toFixed(3)})'[vout]`
+      );
+    } else {
+      filters.push(`[voc]null[vout]`);
+    }
+  } else {
+    filters.push(`[vtxt]null[vout]`);
+  }
 
   return filters.join(';');
 }
 
-async function runFfmpeg(
+async function runFfmpegVideoAudio(
   videoPath: string,
   audioPath: string,
   outputPath: string,
@@ -243,37 +298,58 @@ async function runFfmpeg(
     artistName: string;
     trackTitle: string;
     editorSettings: EditorSettings;
+    coverPath: string | null;
   }
 ): Promise<void> {
-  const { hookStart, hookDuration, artistName, trackTitle, editorSettings } = opts;
+  const { hookStart, hookDuration, artistName, trackTitle, editorSettings, coverPath } = opts;
 
-  const filterComplex = buildFfmpegFilterComplex({
+  const filterComplex = buildFilterComplex({
     hookDuration,
     artistName,
     trackTitle,
     editorSettings,
+    coverPath,
   });
 
-  await execFileAsync('ffmpeg', [
+  const args = [
     '-y',
-    '-i', videoPath,
-    '-ss', hookStart.toString(),
-    '-t', hookDuration.toString(),
-    '-i', audioPath,
-    '-filter_complex', filterComplex,
-    '-map', '[vout]',
-    '-map', '1:a',
-    '-c:v', 'libx264',
-    '-c:a', 'aac',
-    '-pix_fmt', 'yuv420p',
+    '-i',
+    videoPath,
+    '-ss',
+    hookStart.toString(),
+    '-t',
+    hookDuration.toString(),
+    '-i',
+    audioPath,
+  ];
+
+  if (coverPath && editorSettings.endCardEnabled) {
+    args.push('-loop', '1', '-framerate', '1', '-t', hookDuration.toString(), '-i', coverPath);
+  }
+
+  args.push(
+    '-filter_complex',
+    filterComplex,
+    '-map',
+    '[vout]',
+    '-map',
+    '1:a',
+    '-c:v',
+    'libx264',
+    '-c:a',
+    'aac',
+    '-pix_fmt',
+    'yuv420p',
     '-shortest',
-    '-movflags', '+faststart',
-    outputPath,
-  ]);
+    '-movflags',
+    '+faststart',
+    outputPath
+  );
+
+  await execFileAsync('ffmpeg', args);
 }
 
-/** Même graphe vidéo (filtres, texte) ; piste audio = silence (si pas de morceau sur la campagne). */
-async function runFfmpegWithSilentAudio(
+async function runFfmpegSilent(
   videoPath: string,
   outputPath: string,
   opts: {
@@ -282,35 +358,59 @@ async function runFfmpegWithSilentAudio(
     artistName: string;
     trackTitle: string;
     editorSettings: EditorSettings;
+    coverPath: string | null;
   }
 ): Promise<void> {
-  const { hookStart, hookDuration, artistName, trackTitle, editorSettings } = opts;
+  const { hookStart, hookDuration, artistName, trackTitle, editorSettings, coverPath } = opts;
 
-  const filterComplex = buildFfmpegFilterComplex({
+  const filterComplex = buildFilterComplex({
     hookDuration,
     artistName,
     trackTitle,
     editorSettings,
+    coverPath,
   });
 
-  await execFileAsync('ffmpeg', [
+  const args: string[] = [
     '-y',
-    '-i', videoPath,
-    '-ss', hookStart.toString(),
-    '-t', hookDuration.toString(),
-    '-f', 'lavfi',
-    '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000',
-    '-t', hookDuration.toString(),
-    '-filter_complex', filterComplex,
-    '-map', '[vout]',
-    '-map', '1:a',
-    '-c:v', 'libx264',
-    '-c:a', 'aac',
-    '-pix_fmt', 'yuv420p',
+    '-i',
+    videoPath,
+    '-ss',
+    hookStart.toString(),
+    '-t',
+    hookDuration.toString(),
+    '-f',
+    'lavfi',
+    '-i',
+    'anullsrc=channel_layout=stereo:sample_rate=48000',
+    '-t',
+    hookDuration.toString(),
+  ];
+
+  if (coverPath && editorSettings.endCardEnabled) {
+    args.push('-loop', '1', '-framerate', '1', '-t', hookDuration.toString(), '-i', coverPath);
+  }
+
+  args.push(
+    '-filter_complex',
+    filterComplex,
+    '-map',
+    '[vout]',
+    '-map',
+    '1:a',
+    '-c:v',
+    'libx264',
+    '-c:a',
+    'aac',
+    '-pix_fmt',
+    'yuv420p',
     '-shortest',
-    '-movflags', '+faststart',
-    outputPath,
-  ]);
+    '-movflags',
+    '+faststart',
+    outputPath
+  );
+
+  await execFileAsync('ffmpeg', args);
 }
 
 function hexToFfmpegColor(hex: string): string {

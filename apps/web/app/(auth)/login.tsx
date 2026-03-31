@@ -8,7 +8,7 @@ import {
   Platform,
   TouchableOpacity,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { ApolloError } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -63,6 +63,8 @@ export default function LoginScreen() {
   const { login } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
+  const redirectPath = typeof redirect === 'string' ? redirect : undefined;
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [email, setEmail] = useState('');
@@ -115,7 +117,14 @@ export default function LoginScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>{t('auth.login.noAccount')}</Text>
-            <Link href="/(auth)/signup" asChild>
+            <Link
+              href={
+                redirectPath
+                  ? (`/(auth)/signup?redirect=${encodeURIComponent(redirectPath)}` as any)
+                  : '/(auth)/signup'
+              }
+              asChild
+            >
               <TouchableOpacity>
                 <Text style={styles.footerLink}>{t('auth.login.signupLink')}</Text>
               </TouchableOpacity>

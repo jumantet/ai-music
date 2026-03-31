@@ -170,7 +170,15 @@ const en = {
       streamingLinkPlaceholder: 'YouTube, SoundCloud, Apple Music link…',
       streamingLinkFetchBtn: 'Fetch →',
       streamingPlatformsHint:
-        'Supports common public track links (video or audio). If it fails, make sure the URL opens the track page.',
+        'Spotify, Apple Music, YouTube / YouTube Music, SoundCloud, Deezer (track page), Bandcamp (oEmbed preview). If it fails, open the public track page. Tidal is not supported yet.',
+      waveformSectionTitle: 'Export range on your waveform',
+      generateFab: 'Generate clip',
+      loginToGenerateFab: 'Sign in to generate',
+      insufficientCredits:
+        'You need a video credit to export. Credit packs are coming soon — contact us if you need access.',
+      audioWhyTitle: 'Why upload an audio file?',
+      audioWhyBody:
+        'It powers the waveform, precise segment selection, and energy analysis. Streaming links only provide title, artist, and artwork.',
       streamingUrlEmpty: 'Paste your track link first.',
       streamingUrlNotFound:
         'Could not read this link. Use the public track page, or try another platform.',
@@ -182,7 +190,17 @@ const en = {
       savedCatalogBtn: 'Pick from my catalog',
       step2VideoTitle: 'Choose your video clip',
       step2VideoSubtitle:
-        'Royalty-free visuals were suggested from the detected mood. Pick the one that fits your ad.',
+        'Royalty-free visuals based on your track and audio analysis. Switch mood or search Pexels. Pick the shot that fits your clip.',
+      step2MoodLabel: 'Visual mood',
+      step2PexelsSearchLabel: 'Search',
+      step2PexelsSearchPlaceholder: 'e.g. neon city night, ocean waves…',
+      step2PexelsSearchSubmit: 'Search',
+      step2PexelsSearchClear: 'Reset',
+      step2PlayPreview: 'Play video preview',
+      step2Page: 'Page {{n}}',
+      step2PaginationA11y: 'Clip pagination',
+      step2LoadingClips: 'Loading visuals…',
+      step2Back: 'Back to track',
       wizardStepUploadAudio: 'Audio file',
       wizardPickTrackHint: 'Choose a track from your catalog.',
       step1: 'Upload',

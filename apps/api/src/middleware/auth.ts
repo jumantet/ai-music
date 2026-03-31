@@ -5,6 +5,8 @@ import type { User } from '@prisma/client';
 
 export interface AuthContext {
   user?: User;
+  /** Header `x-session-id` : brouillon anonyme avant génération. */
+  draftSessionId?: string;
 }
 
 export interface JWTPayload {

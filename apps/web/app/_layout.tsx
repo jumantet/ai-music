@@ -1,7 +1,7 @@
 import '../src/i18n';
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
-import { Slot, useSegments, useRouter } from 'expo-router';
+import { Slot, useSegments, useRouter, useGlobalSearchParams } from 'expo-router';
 import { ApolloProvider } from '@apollo/client';
 import {
   useFonts,
@@ -21,19 +21,26 @@ function RootGuard() {
   const { colors } = useTheme();
   const segments = useSegments();
   const router = useRouter();
+  const { redirect: authRedirectParam } = useGlobalSearchParams<{ redirect?: string }>();
+  const authRedirect = typeof authRedirectParam === 'string' ? authRedirectParam.trim() : '';
 
   useEffect(() => {
     if (isLoading) return;
     const seg0 = segments[0] as string | undefined;
+    const seg1 = segments[1] as string | undefined;
+    const seg2 = segments[2] as string | undefined;
     const inAuthGroup = seg0 === '(auth)';
     const inEpkGroup = seg0 === 'epk';
     const inVerifyPage = seg0 === 'verify';
-    if (!user && !inAuthGroup && !inEpkGroup && !inVerifyPage) {
+    /** Wizard clip lo-fi : accessible sans compte (auth seulement à la génération). */
+    const inClipWizard = seg0 === '(app)' && seg1 === 'campaigns' && seg2 === 'new';
+    if (!user && !inAuthGroup && !inEpkGroup && !inVerifyPage && !inClipWizard) {
       router.replace('/(auth)/login');
     } else if (user && inAuthGroup) {
-      router.replace('/(app)/dashboard');
+      if (authRedirect) router.replace(authRedirect as any);
+      else router.replace('/(app)/dashboard');
     }
-  }, [user, isLoading, segments]);
+  }, [user, isLoading, segments, authRedirect]);
 
   if (isLoading) {
     return (

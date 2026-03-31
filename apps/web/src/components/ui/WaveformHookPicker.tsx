@@ -11,7 +11,10 @@ import type { HookSuggestion } from "@toolkit/shared";
 import { useTheme } from "../../hooks/useTheme";
 import { fonts, fontSize, radius, spacing } from "../../theme";
 
-const HOOK_DURATION = 15; // seconds — fixed window size
+/** Export produit : 5 s → 3 min ; borné aussi par la durée du fichier. */
+const MIN_SEGMENT_SEC = 5;
+const MAX_SEGMENT_SEC = 180;
+const HANDLE_PX = 11;
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
@@ -23,6 +26,18 @@ function energyLabel(energy: string): string {
   if (energy === "high") return "Drop";
   if (energy === "chorus") return "Refrain";
   return "Montée";
+}
+
+function normalizeHookSuggestion(h: HookSuggestion, fileDur: number): HookSuggestion {
+  const cap = fileDur > 0 ? fileDur : MAX_SEGMENT_SEC;
+  let dur = Math.min(MAX_SEGMENT_SEC, Math.max(MIN_SEGMENT_SEC, h.end - h.start));
+  dur = Math.min(dur, cap);
+  let s = Math.max(0, Math.min(h.start, Math.max(0, cap - dur)));
+  let e = Math.min(cap, s + dur);
+  if (e - s < MIN_SEGMENT_SEC) {
+    e = Math.min(cap, s + MIN_SEGMENT_SEC);
+  }
+  return { ...h, start: s, end: e };
 }
 
 interface Props {
@@ -61,6 +76,8 @@ export function WaveformHookPicker({
 
   // Drag state
   const isDraggingRef = useRef(false);
+  const dragModeRef = useRef<"move" | "resize-left" | "resize-right" | null>(null);
+  const anchorTimeRef = useRef(0);
   const dragOffsetTimeRef = useRef(0);
   const hasAutoplayed = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -81,7 +98,9 @@ export function WaveformHookPicker({
     if (suggestions.length === 0 || !selected) return;
     hasAutoplayed.current = true;
     const timer = setTimeout(() => {
-      startPlayback(selected.start, HOOK_DURATION);
+      const fileDur = getEffectiveDuration();
+      const norm = normalizeHookSuggestion(selected, fileDur);
+      startPlayback(norm.start, norm.end - norm.start);
     }, 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -302,7 +321,7 @@ export function WaveformHookPicker({
     drawCanvas();
   }
 
-  function startPlayback(fromTime: number, hookDur = HOOK_DURATION) {
+  function startPlayback(fromTime: number, hookDur = MIN_SEGMENT_SEC) {
     const actx = audioCtxRef.current;
     const buf = audioBufferRef.current;
 
@@ -398,7 +417,6 @@ export function WaveformHookPicker({
 
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
     const clickTime = canvasTimeFromX(x);
     const sel = selectedRef.current;
 
@@ -407,18 +425,36 @@ export function WaveformHookPicker({
       const rx1 = (hook.start / effectiveDur) * canvas.clientWidth;
       const rx2 = (hook.end / effectiveDur) * canvas.clientWidth;
       if (x >= rx1 && x <= rx2) {
-        onSelect(hook);
-        startPlayback(hook.start, HOOK_DURATION);
+        const norm = normalizeHookSuggestion(hook, effectiveDur);
+        onSelect(norm);
+        startPlayback(norm.start, norm.end - norm.start);
         return;
       }
     }
 
-    if (sel) {
+    if (sel && effectiveDur > 0) {
       const selX1 = (sel.start / effectiveDur) * canvas.clientWidth;
       const selX2 = (sel.end / effectiveDur) * canvas.clientWidth;
 
-      // Drag the whole window if clicking inside or near it
+      if (x >= selX1 - HANDLE_PX && x <= selX1 + HANDLE_PX) {
+        dragModeRef.current = "resize-left";
+        anchorTimeRef.current = sel.end;
+        isDraggingRef.current = true;
+        setIsDragging(true);
+        if (isPlaying) stopPlayback();
+        return;
+      }
+      if (x >= selX2 - HANDLE_PX && x <= selX2 + HANDLE_PX) {
+        dragModeRef.current = "resize-right";
+        anchorTimeRef.current = sel.start;
+        isDraggingRef.current = true;
+        setIsDragging(true);
+        if (isPlaying) stopPlayback();
+        return;
+      }
+
       if (x >= selX1 - 12 && x <= selX2 + 12) {
+        dragModeRef.current = "move";
         isDraggingRef.current = true;
         setIsDragging(true);
         dragOffsetTimeRef.current = clickTime - sel.start;
@@ -427,15 +463,23 @@ export function WaveformHookPicker({
       }
     }
 
-    // Click outside → snap window to click position
-    const newStart = Math.max(0, Math.min(effectiveDur - HOOK_DURATION, clickTime - HOOK_DURATION / 2));
-    const newHook: HookSuggestion = { start: newStart, end: newStart + HOOK_DURATION, label: "Custom", energy: "chorus" };
+    const win = Math.min(
+      MAX_SEGMENT_SEC,
+      Math.max(MIN_SEGMENT_SEC, Math.min(30, effectiveDur * 0.25 || MIN_SEGMENT_SEC))
+    );
+    const maxStart = Math.max(0, effectiveDur - win);
+    const newStart = Math.max(0, Math.min(maxStart, clickTime - win / 2));
+    const newHook = normalizeHookSuggestion(
+      { start: newStart, end: newStart + win, label: "Custom", energy: "chorus" },
+      effectiveDur
+    );
     onSelect(newHook);
-    currentTimeRef.current = newStart;
+    currentTimeRef.current = newHook.start;
     if (isPlaying) stopPlayback();
+    dragModeRef.current = "move";
     isDraggingRef.current = true;
     setIsDragging(true);
-    dragOffsetTimeRef.current = clickTime - newStart;
+    dragOffsetTimeRef.current = clickTime - newHook.start;
     requestAnimationFrame(drawCanvas);
   }
 
@@ -444,30 +488,58 @@ export function WaveformHookPicker({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const effectiveDur = getEffectiveDuration();
     const rect = canvas.getBoundingClientRect();
     const x = Math.max(0, Math.min(canvas.clientWidth, e.clientX - rect.left));
     const t = canvasTimeFromX(x);
-    const newStart = Math.max(0, Math.min(getEffectiveDuration() - HOOK_DURATION, t - dragOffsetTimeRef.current));
     const sel = selectedRef.current;
-    const newHook: HookSuggestion = {
-      start: newStart,
-      end: newStart + HOOK_DURATION,
-      label: sel?.label ?? "Custom",
-      energy: sel?.energy ?? "chorus",
-    };
-    onSelect(newHook);
-    currentTimeRef.current = newStart;
-    setDisplayTime(newStart);
+    if (!sel) return;
+
+    const mode = dragModeRef.current;
+    if (mode === "resize-left") {
+      const anchorEnd = anchorTimeRef.current;
+      let newStart = Math.max(0, Math.min(t, anchorEnd - MIN_SEGMENT_SEC));
+      if (anchorEnd - newStart > MAX_SEGMENT_SEC) newStart = anchorEnd - MAX_SEGMENT_SEC;
+      const next = normalizeHookSuggestion(
+        { ...sel, start: newStart, end: anchorEnd },
+        effectiveDur
+      );
+      onSelect(next);
+      currentTimeRef.current = next.start;
+      setDisplayTime(next.start);
+    } else if (mode === "resize-right") {
+      const anchorStart = anchorTimeRef.current;
+      let newEnd = Math.min(effectiveDur, Math.max(t, anchorStart + MIN_SEGMENT_SEC));
+      if (newEnd - anchorStart > MAX_SEGMENT_SEC) newEnd = anchorStart + MAX_SEGMENT_SEC;
+      const next = normalizeHookSuggestion(
+        { ...sel, start: anchorStart, end: newEnd },
+        effectiveDur
+      );
+      onSelect(next);
+      currentTimeRef.current = next.start;
+      setDisplayTime(next.start);
+    } else {
+      const win = sel.end - sel.start;
+      const newStart = Math.max(0, Math.min(effectiveDur - win, t - dragOffsetTimeRef.current));
+      const next = normalizeHookSuggestion(
+        { ...sel, start: newStart, end: newStart + win },
+        effectiveDur
+      );
+      onSelect(next);
+      currentTimeRef.current = next.start;
+      setDisplayTime(next.start);
+    }
     requestAnimationFrame(drawCanvas);
   }
 
   function handlePointerUp() {
     if (isDraggingRef.current) {
       isDraggingRef.current = false;
+      dragModeRef.current = null;
       setIsDragging(false);
-      // Auto-preview after positioning
       if (selectedRef.current) {
-        startPlayback(selectedRef.current.start, HOOK_DURATION);
+        const d = selectedRef.current.end - selectedRef.current.start;
+        startPlayback(selectedRef.current.start, Math.max(MIN_SEGMENT_SEC, d));
       }
     }
   }
@@ -534,7 +606,7 @@ export function WaveformHookPicker({
           ? React.createElement("video", {
               ref: videoRef,
               src: previewVideoUrl,
-              loop: false,
+              loop: true,
               muted: true,
               playsInline: true,
               style: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" },
@@ -601,7 +673,7 @@ export function WaveformHookPicker({
               alignItems: "center", justifyContent: "center",
             }}>
               <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: "#fff" }}>
-                {selected ? `${Math.round(selected.end - selected.start)}s` : `${HOOK_DURATION}s`}
+                {selected ? `${Math.round(selected.end - selected.start)}s` : `${MIN_SEGMENT_SEC}s+`}
               </Text>
             </View>
 

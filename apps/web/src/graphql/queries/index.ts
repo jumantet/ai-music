@@ -15,6 +15,11 @@ const EDITOR_SETTINGS_FRAGMENT = `
     textBgColor
     textBgOpacity
     textPosition
+    endCardEnabled
+    endCardDurationSec
+    endCardTitle
+    endCardShowTitle
+    endCardCoverUrl
   }
 `;
 
@@ -26,6 +31,7 @@ export const ME_QUERY = gql`
       name
       plan
       emailVerified
+      videoCredits
       metaConnected
       metaAdAccountId
       spotifyArtistId
@@ -143,8 +149,16 @@ export const CAMPAIGN_QUERY = gql`
 `;
 
 export const SUGGEST_HOOKS_QUERY = gql`
-  query SuggestHooks($campaignId: ID!) {
-    suggestHooks(campaignId: $campaignId) {
+  query SuggestHooks(
+    $campaignId: ID!
+    $audioDurationSec: Float
+    $audioEnergyEnvelope: [Float!]
+  ) {
+    suggestHooks(
+      campaignId: $campaignId
+      audioDurationSec: $audioDurationSec
+      audioEnergyEnvelope: $audioEnergyEnvelope
+    ) {
       start
       end
       label
@@ -154,8 +168,16 @@ export const SUGGEST_HOOKS_QUERY = gql`
 `;
 
 export const SUGGEST_MOOD_QUERY = gql`
-  query SuggestMood($campaignId: ID!) {
-    suggestMood(campaignId: $campaignId) {
+  query SuggestMood(
+    $campaignId: ID!
+    $audioDurationSec: Float
+    $audioEnergyEnvelope: [Float!]
+  ) {
+    suggestMood(
+      campaignId: $campaignId
+      audioDurationSec: $audioDurationSec
+      audioEnergyEnvelope: $audioEnergyEnvelope
+    ) {
       moods {
         key
         label
@@ -169,6 +191,27 @@ export const SUGGEST_MOOD_QUERY = gql`
 export const SEARCH_VIDEOS_FOR_MOOD_QUERY = gql`
   query SearchVideosForMood($mood: String!, $page: Int, $keywords: [String!]) {
     searchVideosForMood(mood: $mood, page: $page, keywords: $keywords) {
+      videos {
+        id
+        url
+        thumbnailUrl
+        previewUrl
+        duration
+        width
+        height
+        photographer
+        photographerUrl
+      }
+      totalResults
+      page
+      perPage
+    }
+  }
+`;
+
+export const SEARCH_PEXELS_VIDEOS_QUERY = gql`
+  query SearchPexelsVideos($query: String!, $page: Int) {
+    searchPexelsVideos(query: $query, page: $page) {
       videos {
         id
         url

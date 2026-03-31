@@ -11,6 +11,7 @@ interface AuthUser {
   name: string;
   plan: 'FREE' | 'PRO';
   emailVerified: boolean;
+  videoCredits?: number;
   spotifyArtistId?: string | null;
   spotifyArtistName?: string | null;
 }
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem('auth_token', token);
     await AsyncStorage.setItem('auth_user', JSON.stringify(authUser));
     setUser(authUser);
-    router.replace('/(app)/dashboard');
+    /** Navigation hors (auth) : `RootGuard` (redirect URL ou dashboard). */
   }, [loginMutation]);
 
   const signup = useCallback(
@@ -64,7 +65,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.setItem('auth_token', token);
       await AsyncStorage.setItem('auth_user', JSON.stringify(authUser));
       setUser(authUser);
-      router.replace('/(app)/dashboard');
     },
     [signupMutation]
   );

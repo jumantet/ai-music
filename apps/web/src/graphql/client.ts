@@ -7,6 +7,7 @@ import {
 import { setContext } from "@apollo/client/link/context";
 import { onError } from "@apollo/client/link/error";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ensureDraftSessionId } from "../lib/draftSession";
 import { triggerForceLogout, triggerUnverifiedPrompt } from "./authEvents";
 
 const API_URL =
@@ -18,6 +19,20 @@ export function getApiOrigin(): string {
 }
 
 const httpLink = createHttpLink({ uri: API_URL });
+
+const draftSessionLink = setContext(async (_, { headers }) => {
+  try {
+    const sessionId = await ensureDraftSessionId();
+    return {
+      headers: {
+        ...headers,
+        "x-session-id": sessionId,
+      },
+    };
+  } catch {
+    return { headers };
+  }
+});
 
 const authLink = setContext(async (_, { headers }) => {
   try {
@@ -45,6 +60,10 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
         return;
       }
 
+      if (extensions?.code === "INSUFFICIENT_CREDITS") {
+        return;
+      }
+
       const isAuthError = AUTH_ERRORS.some((e) => message.includes(e));
       if (isAuthError) {
         AsyncStorage.multiRemove(["auth_token", "auth_user"]).then(() => {
@@ -59,7 +78,7 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
 });
 
 export const apolloClient = new ApolloClient({
-  link: from([errorLink, authLink, httpLink]),
+  link: from([errorLink, draftSessionLink, authLink, httpLink]),
   cache: new InMemoryCache(),
   defaultOptions: {
     watchQuery: { fetchPolicy: "cache-and-network" },

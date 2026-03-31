@@ -8,7 +8,7 @@ import {
   Platform,
   TouchableOpacity,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/hooks/useTheme';
@@ -58,6 +58,8 @@ export default function SignupScreen() {
   const { signup } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
+  const redirectPath = typeof redirect === 'string' ? redirect : undefined;
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [email, setEmail] = useState('');
@@ -123,7 +125,14 @@ export default function SignupScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>{t('auth.signup.hasAccount')}</Text>
-            <Link href="/(auth)/login" asChild>
+            <Link
+              href={
+                redirectPath
+                  ? (`/(auth)/login?redirect=${encodeURIComponent(redirectPath)}` as any)
+                  : '/(auth)/login'
+              }
+              asChild
+            >
               <TouchableOpacity>
                 <Text style={styles.footerLink}>{t('auth.signup.loginLink')}</Text>
               </TouchableOpacity>

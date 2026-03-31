@@ -10,6 +10,13 @@ import { stripe, createCheckoutSession } from "./services/stripe";
 import { prisma } from "./services/prisma";
 import type { AuthContext } from "./middleware/auth";
 
+function readDraftSessionId(req: express.Request): string | undefined {
+  const h = req.headers["x-session-id"];
+  if (typeof h === "string" && h.trim().length >= 8) return h.trim();
+  if (Array.isArray(h) && h[0]?.trim()) return h[0].trim();
+  return undefined;
+}
+
 /** Autorise localhost / 127.0.0.1 (navigateur souvent sur l’un ou l’autre → évite CORS silencieux). */
 function isAllowedCorsOrigin(origin: string | undefined): boolean {
   if (!origin) return true;
@@ -111,7 +118,8 @@ async function main() {
           ? authHeader.slice(7)
           : undefined;
         const user = await getUserFromToken(token);
-        return { user };
+        const draftSessionId = readDraftSessionId(req);
+        return { user, draftSessionId };
       },
     }),
   );

@@ -4,7 +4,13 @@
  */
 import { getAppAccessToken, fetchSpotifyTrackById, parseSpotifyTrackIdFromInput } from './spotify';
 
-export type StreamingMetadataSource = 'SPOTIFY' | 'YOUTUBE' | 'SOUNDCLOUD' | 'APPLE_MUSIC';
+export type StreamingMetadataSource =
+  | 'SPOTIFY'
+  | 'YOUTUBE'
+  | 'SOUNDCLOUD'
+  | 'APPLE_MUSIC'
+  | 'DEEZER'
+  | 'BANDCAMP';
 
 export interface StreamingTrackMetadata {
   source: StreamingMetadataSource;
@@ -101,6 +107,64 @@ async function fetchYoutubeOembed(pageUrl: string): Promise<{
     title: trackTitle,
     artistName: artistName || '—',
     albumName: 'YouTube',
+    thumbnailUrl: json.thumbnail_url ?? null,
+  };
+}
+
+function parseDeezerTrackId(urlStr: string): string | null {
+  try {
+    const u = new URL(urlStr.trim());
+    const h = u.hostname.replace(/^www\./i, '').toLowerCase();
+    if (!h.endsWith('deezer.com')) return null;
+    const m = /\/track\/(\d+)/.exec(u.pathname);
+    return m?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchDeezerTrack(trackId: string): Promise<{
+  name: string;
+  artistName: string;
+  albumName: string;
+  albumImageUrl: string | null;
+  durationMs: number;
+} | null> {
+  const json = (await fetchJson(`https://api.deezer.com/track/${encodeURIComponent(trackId)}`)) as {
+    title?: string;
+    duration?: number;
+    artist?: { name?: string };
+    album?: { title?: string; cover_xl?: string; cover_medium?: string };
+    error?: { message?: string };
+  } | null;
+  if (!json?.title || json.error) return null;
+  const cover = json.album?.cover_xl ?? json.album?.cover_medium ?? null;
+  return {
+    name: json.title,
+    artistName: (json.artist?.name ?? '').trim() || '—',
+    albumName: (json.album?.title ?? '').trim() || 'Deezer',
+    albumImageUrl: cover,
+    durationMs: (json.duration ?? 0) * 1000,
+  };
+}
+
+async function fetchBandcampOembed(pageUrl: string): Promise<{
+  title: string;
+  artistName: string;
+  albumName: string;
+  thumbnailUrl: string | null;
+} | null> {
+  const oembedUrl = `https://bandcamp.com/oembed?url=${encodeURIComponent(pageUrl)}&format=json`;
+  const json = (await fetchJson(oembedUrl)) as {
+    title?: string;
+    author_name?: string;
+    thumbnail_url?: string;
+  } | null;
+  if (!json?.title) return null;
+  return {
+    title: json.title.trim(),
+    artistName: (json.author_name ?? '—').trim(),
+    albumName: 'Bandcamp',
     thumbnailUrl: json.thumbnail_url ?? null,
   };
 }
@@ -224,6 +288,39 @@ export async function resolveStreamingTrackMetadata(rawUrl: string): Promise<Str
     if (m) {
       return {
         source: 'SOUNDCLOUD',
+        spotifyTrackId: null,
+        externalId: null,
+        name: m.title,
+        artistName: m.artistName,
+        albumName: m.albumName,
+        albumImageUrl: m.thumbnailUrl,
+        durationMs: 0,
+      };
+    }
+  }
+
+  const deezerId = parseDeezerTrackId(url);
+  if (deezerId) {
+    const m = await fetchDeezerTrack(deezerId);
+    if (m) {
+      return {
+        source: 'DEEZER',
+        spotifyTrackId: null,
+        externalId: deezerId,
+        name: m.name,
+        artistName: m.artistName,
+        albumName: m.albumName,
+        albumImageUrl: m.albumImageUrl,
+        durationMs: m.durationMs,
+      };
+    }
+  }
+
+  if (/bandcamp\.com/i.test(url)) {
+    const m = await fetchBandcampOembed(url);
+    if (m) {
+      return {
+        source: 'BANDCAMP',
         spotifyTrackId: null,
         externalId: null,
         name: m.title,

@@ -87,6 +87,15 @@ const MOTION_PRESETS: Array<{ key: string; label: string; subtitle: string }> = 
   { key: 'glitch', label: 'Glitch', subtitle: 'Numérique' },
 ];
 
+/** Mouvements prioritaires (lo-fi / ciné) — le reste sous « Autres ». */
+const LOFI_MOTION_KEYS = new Set([
+  'none', 'halo', 'rimlight', 'bloom', 'dream', 'mesh', 'sheen', 'glass', 'aurora',
+  'vhs', 'noir', 'cinematic', 'aqua', 'pulseblur', 'drift', 'kenburns', 'zoomout',
+]);
+
+const MOTION_PRESETS_LOFI = MOTION_PRESETS.filter((m) => LOFI_MOTION_KEYS.has(m.key));
+const MOTION_PRESETS_OTHER = MOTION_PRESETS.filter((m) => !LOFI_MOTION_KEYS.has(m.key));
+
 const MOTION_CSS = `
 @keyframes ve-kenburns {
   0% { transform: scale(1) translate(0, 0); }
@@ -613,15 +622,20 @@ export interface VideoEditorSettings {
   textBgColor: string;
   textBgOpacity: number;
   textPosition: 'top' | 'center' | 'bottom';
+  endCardEnabled: boolean;
+  endCardDurationSec: number;
+  endCardTitle: string;
+  endCardShowTitle: boolean;
+  endCardCoverUrl: string;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: VideoEditorSettings = {
-  filterPreset: 'none',
+  filterPreset: 'tape_warmth',
   brightness: 100,
   contrast: 100,
   saturation: 100,
-  grain: 0,
-  motionPreset: 'none',
+  grain: 12,
+  motionPreset: 'dream',
   text: '',
   fontFamily: 'sans',
   fontSize: 42,
@@ -629,6 +643,11 @@ export const DEFAULT_EDITOR_SETTINGS: VideoEditorSettings = {
   textBgColor: '#000000',
   textBgOpacity: 0.5,
   textPosition: 'bottom',
+  endCardEnabled: false,
+  endCardDurationSec: 3,
+  endCardTitle: '',
+  endCardShowTitle: true,
+  endCardCoverUrl: '',
 };
 
 interface FilterPreset {
@@ -640,12 +659,19 @@ interface FilterPreset {
 
 const FILTER_PRESETS: FilterPreset[] = [
   { key: 'none',    label: 'Original', colors: ['#1a1a2e', '#2d2d4e'], css: '' },
+  { key: 'tape_warmth', label: 'Tape warm', colors: ['#3d2f2a', '#c9a87c'], css: 'saturate(0.52) contrast(0.88) brightness(1.05) sepia(0.15)' },
+  { key: 'dusk_room', label: 'Dusk room', colors: ['#2a2235', '#c4a574'], css: 'saturate(0.48) contrast(0.9) brightness(0.98) sepia(0.12) hue-rotate(8deg)' },
+  { key: 'rain_glass', label: 'Rain glass', colors: ['#1e2a33', '#8aa4b4'], css: 'saturate(0.42) contrast(0.95) brightness(0.94) hue-rotate(198deg)' },
+  { key: 'forest_mist', label: 'Forest mist', colors: ['#1a2e22', '#7d9a82'], css: 'saturate(0.55) contrast(0.84) brightness(0.96) hue-rotate(78deg)' },
+  { key: 'moon_cool', label: 'Moon cool', colors: ['#1a1f2e', '#9aa8c4'], css: 'saturate(0.48) contrast(1.02) brightness(0.93) hue-rotate(215deg)' },
+  { key: 'desk_night', label: 'Desk night', colors: ['#2a2418', '#e8c48a'], css: 'saturate(0.58) contrast(0.92) brightness(1.04) sepia(0.18) hue-rotate(12deg)' },
+  { key: 'soft_vhs', label: 'Soft VHS', colors: ['#2d2a38', '#b8a8c9'], css: 'saturate(0.62) contrast(0.88) brightness(1.02) hue-rotate(165deg)' },
+  { key: 'lofi',    label: 'Lo-fi',    colors: ['#e2d9f3', '#c4b5fd'], css: 'brightness(1.15) saturate(0.45) contrast(0.82) sepia(0.2)' },
   { key: 'prisme',  label: 'Prisme',   colors: ['#ff0066', '#00ffcc'], css: 'saturate(2.2) contrast(1.25) brightness(1.05) hue-rotate(8deg)' },
   { key: 'super8',  label: 'Super 8',  colors: ['#d4a76a', '#f2c882'], css: 'sepia(0.65) brightness(1.18) contrast(0.85) saturate(1.25)' },
   { key: 'k7',      label: 'K7',       colors: ['#1a3a2a', '#3d9970'], css: 'saturate(0.65) contrast(1.3) brightness(0.9) hue-rotate(168deg)' },
   { key: 'neon',    label: 'Néon',     colors: ['#7c3aed', '#ec4899'], css: 'brightness(0.65) contrast(1.6) saturate(2.8) hue-rotate(250deg)' },
   { key: 'dore',    label: 'Doré',     colors: ['#fbbf24', '#f97316'], css: 'sepia(0.45) saturate(1.9) brightness(1.1) contrast(1.05) hue-rotate(-10deg)' },
-  { key: 'lofi',    label: 'Lo-fi',    colors: ['#e2d9f3', '#c4b5fd'], css: 'brightness(1.15) saturate(0.45) contrast(0.82) sepia(0.2)' },
   { key: 'cobalt',  label: 'Cobalt',   colors: ['#1d4ed8', '#3b82f6'], css: 'brightness(0.95) saturate(0.75) contrast(1.2) hue-rotate(202deg)' },
   { key: 'duotone', label: 'Duotone',  colors: ['#9333ea', '#db2777'], css: 'saturate(3.5) contrast(1.35) brightness(0.88) hue-rotate(285deg)' },
   { key: 'matrix',  label: 'Matrix',   colors: ['#052e16', '#16a34a'], css: 'saturate(1.5) contrast(1.3) brightness(0.9) hue-rotate(100deg)' },
@@ -686,6 +712,10 @@ interface Props {
   onChange: (s: VideoEditorSettings) => void;
   onBack?: () => void;
   fullBleed?: boolean;
+  /** Cover streaming / import — préremplit l’overlay de fin si activé. */
+  coverImageUrl?: string | null;
+  /** Titre du morceau pour l’end card (placeholder). */
+  defaultEndCardTitle?: string;
 }
 
 const TAB_DEFS: Array<{
@@ -763,6 +793,8 @@ export function VideoEditorStep({
   settings,
   onChange,
   fullBleed,
+  coverImageUrl,
+  defaultEndCardTitle = '',
 }: Props) {
   const { colors } = useTheme();
   const isMobile = useIsMobile();
@@ -1042,58 +1074,61 @@ export function VideoEditorStep({
     </View>
   );
 
+  const renderMotionTiles = (list: typeof MOTION_PRESETS) =>
+    list.map((m) => {
+      const isActive = settings.motionPreset === m.key;
+      return (
+        <TouchableOpacity
+          key={m.key}
+          style={[
+            styles.fxTile,
+            {
+              borderColor: isActive ? colors.primary : colors.border,
+              backgroundColor: isActive ? colors.primaryBg : colors.bgCard,
+            },
+            isActive && { borderColor: colors.primary },
+            isActive &&
+              Platform.OS === 'web' &&
+              ({
+                boxShadow: `0 0 0 2px ${colors.primary}45, 0 14px 32px -12px ${colors.primary}40`,
+              } as const),
+          ]}
+          onPress={() => set('motionPreset', m.key)}
+          activeOpacity={0.88}
+          accessibilityLabel={`${m.label}. ${m.subtitle}`}
+        >
+          <View
+            style={[
+              styles.fxTileIconRing,
+              {
+                borderColor: isActive ? colors.primary : colors.borderLight,
+                backgroundColor: isActive ? colors.bgElevated : colors.bgHover,
+              },
+            ]}
+          >
+            <Ionicons name={motionIconFor(m.key)} size={22} color={isActive ? colors.primary : colors.textSecondary} />
+          </View>
+          <Text
+            style={[styles.fxTileLabel, { color: colors.textSecondary }, isActive && { color: colors.primary, fontFamily: fonts.semiBold }]}
+            numberOfLines={2}
+          >
+            {m.label}
+          </Text>
+          {isActive ? <View style={[styles.fxTileDot, { backgroundColor: colors.primary }]} /> : <View style={styles.fxTileDotSpacer} />}
+        </TouchableOpacity>
+      );
+    });
+
   const motionPanel = (
     <View style={[styles.tabPanel, styles.tabPanelFill]}>
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>Mouvement & style</Text>
-      <View style={styles.fxGrid}>
-        {MOTION_PRESETS.map(m => {
-          const isActive = settings.motionPreset === m.key;
-          return (
-            <TouchableOpacity
-              key={m.key}
-              style={[
-                styles.fxTile,
-                {
-                  borderColor: isActive ? colors.primary : colors.border,
-                  backgroundColor: isActive ? colors.primaryBg : colors.bgCard,
-                },
-                isActive && { borderColor: colors.primary },
-                isActive &&
-                  Platform.OS === 'web' &&
-                  ({
-                    boxShadow: `0 0 0 2px ${colors.primary}45, 0 14px 32px -12px ${colors.primary}40`,
-                  } as const),
-              ]}
-              onPress={() => set('motionPreset', m.key)}
-              activeOpacity={0.88}
-              accessibilityLabel={`${m.label}. ${m.subtitle}`}
-            >
-              <View
-                style={[
-                  styles.fxTileIconRing,
-                  {
-                    borderColor: isActive ? colors.primary : colors.borderLight,
-                    backgroundColor: isActive ? colors.bgElevated : colors.bgHover,
-                  },
-                ]}
-              >
-                <Ionicons name={motionIconFor(m.key)} size={22} color={isActive ? colors.primary : colors.textSecondary} />
-              </View>
-              <Text
-                style={[styles.fxTileLabel, { color: colors.textSecondary }, isActive && { color: colors.primary, fontFamily: fonts.semiBold }]}
-                numberOfLines={2}
-              >
-                {m.label}
-              </Text>
-              {isActive ? <View style={[styles.fxTileDot, { backgroundColor: colors.primary }]} /> : <View style={styles.fxTileDotSpacer} />}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>Lo-fi & ciné</Text>
+      <View style={styles.fxGrid}>{renderMotionTiles(MOTION_PRESETS_LOFI)}</View>
+      <Text style={[styles.fxSectionTitle, { color: colors.textMuted, marginTop: spacing.lg }]}>Autres</Text>
+      <View style={styles.fxGrid}>{renderMotionTiles(MOTION_PRESETS_OTHER)}</View>
       <View style={[styles.fxFootnote, { backgroundColor: colors.bgCard, borderColor: colors.borderLight }]}>
         <Ionicons name="phone-portrait-outline" size={12} color={colors.textMuted} />
         <Text style={[styles.fxFootnoteText, { color: colors.textMuted }]}>
-          Aperçu ici uniquement · l’export final n’applique pas encore ces effets
+          Animations : aperçu web · l’export applique filtres couleur, grain et fin de clip (cover).
         </Text>
       </View>
     </View>
@@ -1185,6 +1220,95 @@ export function VideoEditorStep({
           </TouchableOpacity>
         ))}
       </View>
+
+      <Text style={[styles.fxSectionTitle, { color: colors.textMuted, marginTop: spacing.lg }]}>Fin de clip</Text>
+      <TouchableOpacity
+        onPress={() => {
+          const next = !settings.endCardEnabled;
+          onChange({
+            ...settings,
+            endCardEnabled: next,
+            endCardCoverUrl:
+              next && !settings.endCardCoverUrl?.trim() && coverImageUrl?.trim()
+                ? coverImageUrl.trim()
+                : settings.endCardCoverUrl,
+            endCardTitle:
+              next && !settings.endCardTitle?.trim() && defaultEndCardTitle.trim()
+                ? defaultEndCardTitle.trim()
+                : settings.endCardTitle,
+          });
+        }}
+        activeOpacity={0.85}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingVertical: spacing.sm,
+          paddingHorizontal: spacing.md,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: settings.endCardEnabled ? colors.primary : colors.border,
+          backgroundColor: settings.endCardEnabled ? colors.primaryBg : colors.bgCard,
+          marginBottom: settings.endCardEnabled ? spacing.md : 0,
+        }}
+      >
+        <Text style={{ fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textPrimary, flex: 1 }}>
+          Overlay cover + titre (export)
+        </Text>
+        <Ionicons
+          name={settings.endCardEnabled ? 'checkbox' : 'square-outline'}
+          size={22}
+          color={settings.endCardEnabled ? colors.primary : colors.textMuted}
+        />
+      </TouchableOpacity>
+      {settings.endCardEnabled ? (
+        <View style={{ gap: spacing.sm, marginBottom: spacing.md }}>
+          <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>
+            Durée overlay : {settings.endCardDurationSec}s
+          </Text>
+          {React.createElement('input', {
+            type: 'range',
+            min: 1,
+            max: 8,
+            step: 1,
+            value: settings.endCardDurationSec,
+            onChange: (e: any) => set('endCardDurationSec', parseInt(e.target.value, 10)),
+            style: { width: '100%', accentColor: colors.primary },
+          })}
+          <TouchableOpacity
+            onPress={() => set('endCardShowTitle', !settings.endCardShowTitle)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={settings.endCardShowTitle ? 'checkbox' : 'square-outline'}
+              size={20}
+              color={settings.endCardShowTitle ? colors.primary : colors.textMuted}
+            />
+            <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary }}>
+              Afficher le titre sur la cover
+            </Text>
+          </TouchableOpacity>
+          {React.createElement('input', {
+            type: 'text',
+            value: settings.endCardTitle,
+            placeholder: defaultEndCardTitle || 'Titre du morceau',
+            onChange: (e: any) => set('endCardTitle', e.target.value),
+            style: {
+              width: '100%',
+              padding: '12px 14px',
+              borderRadius: radius.lg,
+              border: `1px solid ${colors.border}`,
+              backgroundColor: colors.bgCard,
+              color: colors.textPrimary,
+              fontFamily: 'inherit',
+              fontSize: 14,
+              outline: 'none',
+              boxSizing: 'border-box',
+            },
+          })}
+        </View>
+      ) : null}
     </View>
   );
 

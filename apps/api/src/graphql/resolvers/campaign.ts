@@ -1,34 +1,63 @@
+import { GraphQLError } from 'graphql';
 import { prisma } from '../../services/prisma';
-import { requireAuth, requireVerified } from '../../middleware/auth';
+import { requireAuth } from '../../middleware/auth';
 import { getPresignedUploadUrl, getPublicUrl } from '../../services/storage';
 import { suggestHooks, detectMood } from '../../services/hookFinder';
 import { generateAdVariants } from '../../services/adGenerator';
 import { searchVideos } from '../../services/pexels';
 import type { AuthContext } from '../../middleware/auth';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 const MOOD_KEYWORDS: Record<string, string[]> = {
-  dreamy: ['dreamy blur', 'soft light nature', 'hazy golden hour'],
-  night_drive: ['city night lights', 'driving highway night', 'neon street'],
-  indie: ['grain film aesthetic', 'indie rooftop sunset', 'lo-fi urban'],
-  psychedelic: ['abstract colorful motion', 'psychedelic prism light', 'trippy visuals'],
-  vintage: ['super 8 film vintage', 'retro old footage', 'analog grain'],
-  urban: ['city street motion', 'urban skyscraper timelapse', 'metro crowd'],
+  dreamy: ['cinematic moody soft light', 'rain window bokeh', 'hazy golden hour nature'],
+  night_drive: ['city night lights cinematic', 'neon street rain moody', 'empty highway night'],
+  indie: ['analog film grain aesthetic', 'lo-fi urban calm', 'bedroom warm light desk'],
+  psychedelic: ['abstract soft light motion', 'prism light subtle', 'dreamy blur colors'],
+  vintage: ['super 8 film vintage texture', 'retro analog footage', 'tape degradation aesthetic'],
+  urban: ['minimal architecture night', 'urban calm empty street', 'subway soft motion'],
 };
+
+const LOFI_STOCK_HINTS = [
+  'cinematic moody soft light',
+  'slow motion atmospheric nature',
+  'night city subtle neon',
+];
 
 function serializeEditorSettings(raw: Prisma.JsonValue | null | undefined) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   return raw as Record<string, unknown>;
 }
 
+/** Accès lecture / écriture : propriétaire OU brouillon session correspondante. */
+function accessWhere(
+  id: string,
+  ctx: AuthContext
+): Prisma.CampaignWhereInput {
+  const or: Prisma.CampaignWhereInput[] = [];
+  if (ctx.user?.id) {
+    or.push({ id, userId: ctx.user.id });
+  }
+  if (ctx.draftSessionId) {
+    or.push({ id, sessionId: ctx.draftSessionId });
+  }
+  return { OR: or };
+}
+
+async function findAccessibleCampaign(
+  id: string,
+  ctx: AuthContext,
+  include: Prisma.CampaignInclude = {}
+) {
+  return prisma.campaign.findFirst({
+    where: accessWhere(id, ctx),
+    include,
+  });
+}
+
 export const campaignResolvers = {
   Query: {
     campaign: async (_: unknown, { id }: { id: string }, ctx: AuthContext) => {
-      requireAuth(ctx.user);
-      const campaign = await prisma.campaign.findFirst({
-        where: { id, userId: ctx.user.id },
-        include: { generatedAd: true },
-      });
+      const campaign = await findAccessibleCampaign(id, ctx, { generatedAd: true });
       if (!campaign) throw new Error('Campaign not found');
       return { ...campaign, editorSettings: serializeEditorSettings(campaign.editorSettings) };
     },
@@ -40,45 +69,82 @@ export const campaignResolvers = {
         include: { generatedAd: true },
         orderBy: { createdAt: 'desc' },
       });
-      return campaigns.map(c => ({ ...c, editorSettings: serializeEditorSettings(c.editorSettings) }));
+      return campaigns.map((c) => ({
+        ...c,
+        editorSettings: serializeEditorSettings(c.editorSettings),
+      }));
     },
 
     suggestHooks: async (
       _: unknown,
-      { campaignId }: { campaignId: string },
+      {
+        campaignId,
+        audioDurationSec,
+        audioEnergyEnvelope,
+      }: {
+        campaignId: string;
+        audioDurationSec?: number | null;
+        audioEnergyEnvelope?: number[] | null;
+      },
       ctx: AuthContext
     ) => {
-      requireAuth(ctx.user);
-      const campaign = await prisma.campaign.findFirst({
-        where: { id: campaignId, userId: ctx.user.id },
-      });
+      const campaign = await findAccessibleCampaign(campaignId, ctx);
       if (!campaign) throw new Error('Campaign not found');
-      return suggestHooks(campaign.trackS3Key ?? null, campaign.trackTitle, campaign.artistName);
+      return suggestHooks(
+        campaign.trackS3Key ?? null,
+        campaign.trackTitle,
+        campaign.artistName,
+        {
+          durationSec: audioDurationSec ?? undefined,
+          audioEnergyEnvelope: audioEnergyEnvelope ?? undefined,
+        }
+      );
     },
 
     suggestMood: async (
       _: unknown,
-      { campaignId }: { campaignId: string },
+      {
+        campaignId,
+        audioDurationSec,
+        audioEnergyEnvelope,
+      }: {
+        campaignId: string;
+        audioDurationSec?: number | null;
+        audioEnergyEnvelope?: number[] | null;
+      },
       ctx: AuthContext
     ) => {
-      requireAuth(ctx.user);
-      const campaign = await prisma.campaign.findFirst({
-        where: { id: campaignId, userId: ctx.user.id },
-      });
+      const campaign = await findAccessibleCampaign(campaignId, ctx);
       if (!campaign) throw new Error('Campaign not found');
-      return detectMood(campaign.trackTitle, campaign.artistName);
+      return detectMood(campaign.trackTitle, campaign.artistName, {
+        durationSec: audioDurationSec ?? undefined,
+        audioEnergyEnvelope: audioEnergyEnvelope ?? undefined,
+      });
     },
 
     searchVideosForMood: async (
       _: unknown,
-      { mood, page = 1, keywords: customKeywords }: { mood: string; page?: number; keywords?: string[] },
-      ctx: AuthContext
+      {
+        mood,
+        page = 1,
+        keywords: customKeywords,
+      }: { mood: string; page?: number; keywords?: string[] }
     ) => {
-      requireAuth(ctx.user);
       const keywords = customKeywords?.length
         ? customKeywords
-        : (MOOD_KEYWORDS[mood] ?? ['music visual aesthetic', 'abstract motion', 'cinematic blur']);
-      return searchVideos(keywords, 'portrait', 8, page);
+        : (MOOD_KEYWORDS[mood] ?? LOFI_STOCK_HINTS);
+      return searchVideos(keywords, 'portrait', 9, page);
+    },
+
+    searchPexelsVideos: async (
+      _: unknown,
+      { query, page = 1 }: { query: string; page?: number }
+    ) => {
+      const q = query.trim().slice(0, 200);
+      if (!q) {
+        return { videos: [], totalResults: 0, page, perPage: 9 };
+      }
+      return searchVideos([q], 'portrait', 9, page);
     },
   },
 
@@ -92,16 +158,17 @@ export const campaignResolvers = {
       }: { trackTitle: string; artistName: string; spotifyTrackId?: string | null },
       ctx: AuthContext
     ) => {
-      requireAuth(ctx.user);
-      requireVerified(ctx.user);
+      if (!ctx.user && !ctx.draftSessionId) {
+        throw new Error('Sign in or send x-session-id header to start a draft');
+      }
+
       const campaign = await prisma.campaign.create({
         data: {
           trackTitle,
           artistName,
-          userId: ctx.user.id,
-          ...(spotifyTrackId?.trim()
-            ? { spotifyTrackId: spotifyTrackId.trim() }
-            : {}),
+          ...(spotifyTrackId?.trim() ? { spotifyTrackId: spotifyTrackId.trim() } : {}),
+          userId: ctx.user ? ctx.user.id : null,
+          sessionId: ctx.user ? null : ctx.draftSessionId!,
         },
         include: { generatedAd: true },
       });
@@ -122,11 +189,8 @@ export const campaignResolvers = {
       },
       ctx: AuthContext
     ) => {
-      requireAuth(ctx.user);
       const { id, ...data } = args;
-      const campaign = await prisma.campaign.findFirst({
-        where: { id, userId: ctx.user.id },
-      });
+      const campaign = await findAccessibleCampaign(id, ctx);
       if (!campaign) throw new Error('Campaign not found');
 
       const updateData: Prisma.CampaignUpdateInput = {};
@@ -146,13 +210,15 @@ export const campaignResolvers = {
         updateData.videoS3Key = data.videoS3Key;
         updateData.videoUrl = getPublicUrl(data.videoS3Key);
       }
-      // Pexels video: only URL, no S3 key
       if (data.videoUrl !== undefined && data.videoS3Key === undefined) {
         updateData.videoUrl = data.videoUrl;
         updateData.videoS3Key = null;
       }
       if (data.editorSettings !== undefined) {
-        updateData.editorSettings = data.editorSettings ?? Prisma.JsonNull;
+        updateData.editorSettings =
+          data.editorSettings === null
+            ? Prisma.JsonNull
+            : (data.editorSettings as Prisma.InputJsonValue);
       }
 
       const updated = await prisma.campaign.update({
@@ -164,10 +230,7 @@ export const campaignResolvers = {
     },
 
     deleteCampaign: async (_: unknown, { id }: { id: string }, ctx: AuthContext) => {
-      requireAuth(ctx.user);
-      const campaign = await prisma.campaign.findFirst({
-        where: { id, userId: ctx.user.id },
-      });
+      const campaign = await findAccessibleCampaign(id, ctx);
       if (!campaign) throw new Error('Campaign not found');
       await prisma.campaign.delete({ where: { id } });
       return true;
@@ -179,39 +242,64 @@ export const campaignResolvers = {
       ctx: AuthContext
     ) => {
       requireAuth(ctx.user);
-      requireVerified(ctx.user);
 
       const campaign = await prisma.campaign.findFirst({
-        where: { id: campaignId, userId: ctx.user.id },
+        where: { id: campaignId },
         include: { generatedAd: true },
       });
       if (!campaign) throw new Error('Campaign not found');
 
+      const canClaim =
+        campaign.userId === ctx.user.id ||
+        (!campaign.userId &&
+          campaign.sessionId &&
+          ctx.draftSessionId &&
+          campaign.sessionId === ctx.draftSessionId);
+
+      if (!canClaim) {
+        throw new Error('Campaign not found or session mismatch');
+      }
+
       if (!campaign.trackS3Key?.trim()) {
         throw new Error(
-          'Upload your track audio file before generating ads. Spotify only fills title and artist; the ad uses your uploaded master.'
+          'Upload your track audio file before generating. Streaming links only provide title and artwork.'
         );
       }
 
-      await prisma.campaign.update({
-        where: { id: campaignId },
-        data: { status: 'GENERATING' },
-      });
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: ctx.user.id } });
+      if (user.videoCredits < 1) {
+        throw new GraphQLError('Not enough video credits. Purchase a pack to continue.', {
+          extensions: { code: 'INSUFFICIENT_CREDITS' },
+        });
+      }
 
-      const hookStart = campaign.hookStart ?? 60;
-      const hookEnd = campaign.hookEnd ?? 75;
+      await prisma.$transaction([
+        prisma.campaign.update({
+          where: { id: campaignId },
+          data: {
+            userId: ctx.user.id,
+            sessionId: null,
+            status: 'GENERATING',
+          },
+        }),
+        prisma.user.update({
+          where: { id: ctx.user.id },
+          data: { videoCredits: { decrement: 1 } },
+        }),
+      ]);
+
+      const hookStart = campaign.hookStart ?? 0;
+      const hookEnd = campaign.hookEnd ?? Math.min(30, hookStart + 30);
       const editorSettings = serializeEditorSettings(campaign.editorSettings) ?? {};
 
-      // Use stored video; fall back to Pexels search if none
       let videoUrl = campaign.videoUrl ?? null;
       if (!videoUrl) {
         try {
-          const result = await searchVideos(
-            ['music visual aesthetic', 'cinematic blur', 'abstract motion'],
-            'portrait', 1, 1
-          );
+          const result = await searchVideos(LOFI_STOCK_HINTS, 'portrait', 1, 1);
           videoUrl = result.videos[0]?.previewUrl ?? null;
-        } catch { /* continue without video */ }
+        } catch {
+          /* */
+        }
       }
 
       let result: { videoS3Key: string; videoUrl: string } = { videoS3Key: '', videoUrl: '' };
@@ -228,9 +316,19 @@ export const campaignResolvers = {
           editorSettings,
         });
         result = variants[0] ?? result;
-      } catch { /* generator threw */ }
+      } catch (e) {
+        console.error('[generateAds]', e);
+        await prisma.user.update({
+          where: { id: ctx.user.id },
+          data: { videoCredits: { increment: 1 } },
+        });
+        await prisma.campaign.update({
+          where: { id: campaignId },
+          data: { status: 'DRAFT' },
+        });
+        throw e;
+      }
 
-      // Last resort: campaign row still has the source video URL from the editor flow
       const finalVideoUrl =
         (result.videoUrl && result.videoUrl.trim()) ||
         (campaign.videoUrl?.trim() ?? '') ||
@@ -262,13 +360,14 @@ export const campaignResolvers = {
 
     getUploadUrl: async (
       _: unknown,
-      { campaignId, fileType, contentType }: { campaignId: string; fileType: string; contentType: string },
+      {
+        campaignId,
+        fileType,
+        contentType,
+      }: { campaignId: string; fileType: string; contentType: string },
       ctx: AuthContext
     ) => {
-      requireAuth(ctx.user);
-      const campaign = await prisma.campaign.findFirst({
-        where: { id: campaignId, userId: ctx.user.id },
-      });
+      const campaign = await findAccessibleCampaign(campaignId, ctx);
       if (!campaign) throw new Error('Campaign not found');
 
       const ext = contentType.split('/')[1] ?? 'bin';
