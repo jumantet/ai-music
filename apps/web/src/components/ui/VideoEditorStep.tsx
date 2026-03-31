@@ -1,21 +1,34 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../hooks/useTheme';
-import { useIsMobile } from '../../hooks/useIsMobile';
-import { spacing, fontSize, radius, fonts } from '../../theme';
-import type { ColorPalette } from '../../theme';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Platform,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../../hooks/useTheme";
+import { useIsMobile } from "../../hooks/useIsMobile";
+import { spacing, fontSize, radius, fonts } from "../../theme";
+import type { ColorPalette } from "../../theme";
 
-const MOTION_STYLE_ID = 'video-editor-motion-keyframes';
-const SVG_FILTERS_ROOT_ID = 'video-editor-svg-filters-root';
+const MOTION_STYLE_ID = "video-editor-motion-keyframes";
+const SVG_FILTERS_ROOT_ID = "video-editor-svg-filters-root";
 
-type EditorTab = 'filters' | 'motion' | 'text';
+type EditorTab = "filters" | "motion" | "text";
 
 /** Filtres SVG (déformation organique) — appliqués sur le conteneur vidéo */
 const SVG_FILTER_BY_MOTION: Partial<Record<string, string>> = {
-  liquify: 'url(#ve-filter-liquify)',
-  ripple: 'url(#ve-filter-ripple)',
-  heat: 'url(#ve-filter-heat)',
+  liquify: "url(#ve-filter-liquify)",
+  ripple: "url(#ve-filter-ripple)",
+  heat: "url(#ve-filter-heat)",
 };
 
 const SVG_FILTERS_HTML = `
@@ -48,53 +61,81 @@ const SVG_FILTERS_HTML = `
  * Aperçu web : CSS + filtres SVG (pas de WebGL pour rester léger).
  * Effets type apps pro : mesh, verre, liquify, VHS, aurore, 3D, etc.
  */
-const MOTION_PRESETS: Array<{ key: string; label: string; subtitle: string }> = [
-  { key: 'none', label: 'Aucun', subtitle: 'Sans effet' },
-  { key: 'halo', label: 'Halo sujet', subtitle: 'Aura centrale type portrait' },
-  { key: 'rimlight', label: 'Liseré', subtitle: 'Balayage lumière' },
-  { key: 'bloom', label: 'Bloom', subtitle: 'Halation ciné' },
-  { key: 'dream', label: 'Rêve', subtitle: 'Vignette & douceur' },
-  { key: 'mesh', label: 'Mesh', subtitle: 'Dégradés fluides 2025' },
-  { key: 'sheen', label: 'Sheen', subtitle: 'Reflet métal / verre' },
-  { key: 'holo', label: 'Hologramme', subtitle: 'Irisé mouvant' },
-  { key: 'lensflare', label: 'Lens flare', subtitle: 'Faux flare anamorphique' },
-  { key: 'glass', label: 'Verre dépoli', subtitle: 'Frosted + saturation' },
-  { key: 'aurora', label: 'Aurore', subtitle: 'Bandes boréales' },
-  { key: 'dopamine', label: 'Dopamine', subtitle: 'Énergie réseaux sociaux' },
-  { key: 'prism', label: 'Prisme', subtitle: 'Conique irisé' },
-  { key: 'chromatic', label: 'RGB split', subtitle: 'Franges couleur' },
-  { key: 'stardust', label: 'Étoiles', subtitle: 'Poussière lumineuse' },
-  { key: 'electric', label: 'Électrique', subtitle: 'Néon bords' },
-  { key: 'neongrid', label: 'Grille néon', subtitle: 'Perspective cyber' },
-  { key: 'liquid', label: 'Fluide', subtitle: 'Clip organique' },
-  { key: 'scan', label: 'Scanline', subtitle: 'Rayon lumineux' },
-  { key: 'vhs', label: 'VHS', subtitle: 'Analogique dégradé' },
-  { key: 'noir', label: 'Neo-noir', subtitle: 'Contraste ciné' },
-  { key: 'cinematic', label: 'Cinémascope', subtitle: 'Bandes noires' },
-  { key: 'aqua', label: 'Underwater', subtitle: 'Aquatique ondulant' },
-  { key: 'iris', label: 'Iris', subtitle: 'Ouverture diaphragme' },
-  { key: 'tilt3d', label: 'Tilt 3D', subtitle: 'Perspective douce' },
-  { key: 'pulseblur', label: 'Pulse blur', subtitle: 'Respiration floue' },
-  { key: 'chromawave', label: 'Chromawave', subtitle: 'Vague de teinte' },
-  { key: 'liquify', label: 'Liquify', subtitle: 'Déformation fluide (SVG)' },
-  { key: 'ripple', label: 'Ripple', subtitle: 'Ondulation surface' },
-  { key: 'heat', label: 'Heat haze', subtitle: 'Chaleur / mirage' },
-  { key: 'kenburns', label: 'Zoom lent', subtitle: 'Ken Burns' },
-  { key: 'zoomout', label: 'Ouverture', subtitle: 'Zoom arrière' },
-  { key: 'beat', label: 'Beat', subtitle: 'Pulsation' },
-  { key: 'pop', label: 'Pop', subtitle: 'Impact' },
-  { key: 'drift', label: 'Dérive', subtitle: 'Pan lent' },
-  { key: 'glitch', label: 'Glitch', subtitle: 'Numérique' },
-];
+const MOTION_PRESETS: Array<{ key: string; label: string; subtitle: string }> =
+  [
+    { key: "none", label: "Aucun", subtitle: "Sans effet" },
+    {
+      key: "halo",
+      label: "Halo sujet",
+      subtitle: "Aura centrale type portrait",
+    },
+    { key: "rimlight", label: "Liseré", subtitle: "Balayage lumière" },
+    { key: "bloom", label: "Bloom", subtitle: "Halation ciné" },
+    { key: "dream", label: "Rêve", subtitle: "Vignette & douceur" },
+    { key: "mesh", label: "Mesh", subtitle: "Dégradés fluides 2025" },
+    { key: "sheen", label: "Sheen", subtitle: "Reflet métal / verre" },
+    { key: "holo", label: "Hologramme", subtitle: "Irisé mouvant" },
+    {
+      key: "lensflare",
+      label: "Lens flare",
+      subtitle: "Faux flare anamorphique",
+    },
+    { key: "glass", label: "Verre dépoli", subtitle: "Frosted + saturation" },
+    { key: "aurora", label: "Aurore", subtitle: "Bandes boréales" },
+    { key: "dopamine", label: "Dopamine", subtitle: "Énergie réseaux sociaux" },
+    { key: "prism", label: "Prisme", subtitle: "Conique irisé" },
+    { key: "chromatic", label: "RGB split", subtitle: "Franges couleur" },
+    { key: "stardust", label: "Étoiles", subtitle: "Poussière lumineuse" },
+    { key: "electric", label: "Électrique", subtitle: "Néon bords" },
+    { key: "neongrid", label: "Grille néon", subtitle: "Perspective cyber" },
+    { key: "liquid", label: "Fluide", subtitle: "Clip organique" },
+    { key: "scan", label: "Scanline", subtitle: "Rayon lumineux" },
+    { key: "vhs", label: "VHS", subtitle: "Analogique dégradé" },
+    { key: "noir", label: "Neo-noir", subtitle: "Contraste ciné" },
+    { key: "cinematic", label: "Cinémascope", subtitle: "Bandes noires" },
+    { key: "aqua", label: "Underwater", subtitle: "Aquatique ondulant" },
+    { key: "iris", label: "Iris", subtitle: "Ouverture diaphragme" },
+    { key: "tilt3d", label: "Tilt 3D", subtitle: "Perspective douce" },
+    { key: "pulseblur", label: "Pulse blur", subtitle: "Respiration floue" },
+    { key: "chromawave", label: "Chromawave", subtitle: "Vague de teinte" },
+    { key: "liquify", label: "Liquify", subtitle: "Déformation fluide (SVG)" },
+    { key: "ripple", label: "Ripple", subtitle: "Ondulation surface" },
+    { key: "heat", label: "Heat haze", subtitle: "Chaleur / mirage" },
+    { key: "kenburns", label: "Zoom lent", subtitle: "Ken Burns" },
+    { key: "zoomout", label: "Ouverture", subtitle: "Zoom arrière" },
+    { key: "beat", label: "Beat", subtitle: "Pulsation" },
+    { key: "pop", label: "Pop", subtitle: "Impact" },
+    { key: "drift", label: "Dérive", subtitle: "Pan lent" },
+    { key: "glitch", label: "Glitch", subtitle: "Numérique" },
+  ];
 
 /** Mouvements prioritaires (lo-fi / ciné) — le reste sous « Autres ». */
 const LOFI_MOTION_KEYS = new Set([
-  'none', 'halo', 'rimlight', 'bloom', 'dream', 'mesh', 'sheen', 'glass', 'aurora',
-  'vhs', 'noir', 'cinematic', 'aqua', 'pulseblur', 'drift', 'kenburns', 'zoomout',
+  "none",
+  "halo",
+  "rimlight",
+  "bloom",
+  "dream",
+  "mesh",
+  "sheen",
+  "glass",
+  "aurora",
+  "vhs",
+  "noir",
+  "cinematic",
+  "aqua",
+  "pulseblur",
+  "drift",
+  "kenburns",
+  "zoomout",
 ]);
 
-const MOTION_PRESETS_LOFI = MOTION_PRESETS.filter((m) => LOFI_MOTION_KEYS.has(m.key));
-const MOTION_PRESETS_OTHER = MOTION_PRESETS.filter((m) => !LOFI_MOTION_KEYS.has(m.key));
+const MOTION_PRESETS_LOFI = MOTION_PRESETS.filter((m) =>
+  LOFI_MOTION_KEYS.has(m.key),
+);
+const MOTION_PRESETS_OTHER = MOTION_PRESETS.filter(
+  (m) => !LOFI_MOTION_KEYS.has(m.key),
+);
 
 const MOTION_CSS = `
 @keyframes ve-kenburns {
@@ -616,12 +657,12 @@ export interface VideoEditorSettings {
   grain: number;
   motionPreset: string;
   text: string;
-  fontFamily: 'sans' | 'serif' | 'mono' | 'bold';
+  fontFamily: "sans" | "serif" | "mono" | "bold";
   fontSize: number;
   fontColor: string;
   textBgColor: string;
   textBgOpacity: number;
-  textPosition: 'top' | 'center' | 'bottom';
+  textPosition: "top" | "center" | "bottom";
   endCardEnabled: boolean;
   endCardDurationSec: number;
   endCardTitle: string;
@@ -630,24 +671,24 @@ export interface VideoEditorSettings {
 }
 
 export const DEFAULT_EDITOR_SETTINGS: VideoEditorSettings = {
-  filterPreset: 'tape_warmth',
+  filterPreset: "tape_warmth",
   brightness: 100,
   contrast: 100,
   saturation: 100,
   grain: 12,
-  motionPreset: 'dream',
-  text: '',
-  fontFamily: 'sans',
+  motionPreset: "dream",
+  text: "",
+  fontFamily: "sans",
   fontSize: 42,
-  fontColor: '#FFFFFF',
-  textBgColor: '#000000',
+  fontColor: "#FFFFFF",
+  textBgColor: "#000000",
   textBgOpacity: 0.5,
-  textPosition: 'bottom',
+  textPosition: "bottom",
   endCardEnabled: false,
   endCardDurationSec: 3,
-  endCardTitle: '',
+  endCardTitle: "",
   endCardShowTitle: true,
-  endCardCoverUrl: '',
+  endCardCoverUrl: "",
 };
 
 interface FilterPreset {
@@ -658,40 +699,138 @@ interface FilterPreset {
 }
 
 const FILTER_PRESETS: FilterPreset[] = [
-  { key: 'none',    label: 'Original', colors: ['#1a1a2e', '#2d2d4e'], css: '' },
-  { key: 'tape_warmth', label: 'Tape warm', colors: ['#3d2f2a', '#c9a87c'], css: 'saturate(0.52) contrast(0.88) brightness(1.05) sepia(0.15)' },
-  { key: 'dusk_room', label: 'Dusk room', colors: ['#2a2235', '#c4a574'], css: 'saturate(0.48) contrast(0.9) brightness(0.98) sepia(0.12) hue-rotate(8deg)' },
-  { key: 'rain_glass', label: 'Rain glass', colors: ['#1e2a33', '#8aa4b4'], css: 'saturate(0.42) contrast(0.95) brightness(0.94) hue-rotate(198deg)' },
-  { key: 'forest_mist', label: 'Forest mist', colors: ['#1a2e22', '#7d9a82'], css: 'saturate(0.55) contrast(0.84) brightness(0.96) hue-rotate(78deg)' },
-  { key: 'moon_cool', label: 'Moon cool', colors: ['#1a1f2e', '#9aa8c4'], css: 'saturate(0.48) contrast(1.02) brightness(0.93) hue-rotate(215deg)' },
-  { key: 'desk_night', label: 'Desk night', colors: ['#2a2418', '#e8c48a'], css: 'saturate(0.58) contrast(0.92) brightness(1.04) sepia(0.18) hue-rotate(12deg)' },
-  { key: 'soft_vhs', label: 'Soft VHS', colors: ['#2d2a38', '#b8a8c9'], css: 'saturate(0.62) contrast(0.88) brightness(1.02) hue-rotate(165deg)' },
-  { key: 'lofi',    label: 'Lo-fi',    colors: ['#e2d9f3', '#c4b5fd'], css: 'brightness(1.15) saturate(0.45) contrast(0.82) sepia(0.2)' },
-  { key: 'prisme',  label: 'Prisme',   colors: ['#ff0066', '#00ffcc'], css: 'saturate(2.2) contrast(1.25) brightness(1.05) hue-rotate(8deg)' },
-  { key: 'super8',  label: 'Super 8',  colors: ['#d4a76a', '#f2c882'], css: 'sepia(0.65) brightness(1.18) contrast(0.85) saturate(1.25)' },
-  { key: 'k7',      label: 'K7',       colors: ['#1a3a2a', '#3d9970'], css: 'saturate(0.65) contrast(1.3) brightness(0.9) hue-rotate(168deg)' },
-  { key: 'neon',    label: 'Néon',     colors: ['#7c3aed', '#ec4899'], css: 'brightness(0.65) contrast(1.6) saturate(2.8) hue-rotate(250deg)' },
-  { key: 'dore',    label: 'Doré',     colors: ['#fbbf24', '#f97316'], css: 'sepia(0.45) saturate(1.9) brightness(1.1) contrast(1.05) hue-rotate(-10deg)' },
-  { key: 'cobalt',  label: 'Cobalt',   colors: ['#1d4ed8', '#3b82f6'], css: 'brightness(0.95) saturate(0.75) contrast(1.2) hue-rotate(202deg)' },
-  { key: 'duotone', label: 'Duotone',  colors: ['#9333ea', '#db2777'], css: 'saturate(3.5) contrast(1.35) brightness(0.88) hue-rotate(285deg)' },
-  { key: 'matrix',  label: 'Matrix',   colors: ['#052e16', '#16a34a'], css: 'saturate(1.5) contrast(1.3) brightness(0.9) hue-rotate(100deg)' },
-  { key: 'velours', label: 'Velours',  colors: ['#4a0e1a', '#831843'], css: 'brightness(0.72) contrast(1.45) saturate(1.3) hue-rotate(330deg) sepia(0.1)' },
+  { key: "none", label: "Original", colors: ["#1a1a2e", "#2d2d4e"], css: "" },
+  {
+    key: "tape_warmth",
+    label: "Tape warm",
+    colors: ["#3d2f2a", "#c9a87c"],
+    css: "saturate(0.52) contrast(0.88) brightness(1.05) sepia(0.15)",
+  },
+  {
+    key: "dusk_room",
+    label: "Dusk room",
+    colors: ["#2a2235", "#c4a574"],
+    css: "saturate(0.48) contrast(0.9) brightness(0.98) sepia(0.12) hue-rotate(8deg)",
+  },
+  {
+    key: "rain_glass",
+    label: "Rain glass",
+    colors: ["#1e2a33", "#8aa4b4"],
+    css: "saturate(0.42) contrast(0.95) brightness(0.94) hue-rotate(198deg)",
+  },
+  {
+    key: "forest_mist",
+    label: "Forest mist",
+    colors: ["#1a2e22", "#7d9a82"],
+    css: "saturate(0.55) contrast(0.84) brightness(0.96) hue-rotate(78deg)",
+  },
+  {
+    key: "moon_cool",
+    label: "Moon cool",
+    colors: ["#1a1f2e", "#9aa8c4"],
+    css: "saturate(0.48) contrast(1.02) brightness(0.93) hue-rotate(215deg)",
+  },
+  {
+    key: "desk_night",
+    label: "Desk night",
+    colors: ["#2a2418", "#e8c48a"],
+    css: "saturate(0.58) contrast(0.92) brightness(1.04) sepia(0.18) hue-rotate(12deg)",
+  },
+  {
+    key: "soft_vhs",
+    label: "Soft VHS",
+    colors: ["#2d2a38", "#b8a8c9"],
+    css: "saturate(0.62) contrast(0.88) brightness(1.02) hue-rotate(165deg)",
+  },
+  {
+    key: "lofi",
+    label: "Lo-fi",
+    colors: ["#e2d9f3", "#c4b5fd"],
+    css: "brightness(1.15) saturate(0.45) contrast(0.82) sepia(0.2)",
+  },
+  {
+    key: "prisme",
+    label: "Prisme",
+    colors: ["#ff0066", "#00ffcc"],
+    css: "saturate(2.2) contrast(1.25) brightness(1.05) hue-rotate(8deg)",
+  },
+  {
+    key: "super8",
+    label: "Super 8",
+    colors: ["#d4a76a", "#f2c882"],
+    css: "sepia(0.65) brightness(1.18) contrast(0.85) saturate(1.25)",
+  },
+  {
+    key: "k7",
+    label: "K7",
+    colors: ["#1a3a2a", "#3d9970"],
+    css: "saturate(0.65) contrast(1.3) brightness(0.9) hue-rotate(168deg)",
+  },
+  {
+    key: "neon",
+    label: "Néon",
+    colors: ["#7c3aed", "#ec4899"],
+    css: "brightness(0.65) contrast(1.6) saturate(2.8) hue-rotate(250deg)",
+  },
+  {
+    key: "dore",
+    label: "Doré",
+    colors: ["#fbbf24", "#f97316"],
+    css: "sepia(0.45) saturate(1.9) brightness(1.1) contrast(1.05) hue-rotate(-10deg)",
+  },
+  {
+    key: "cobalt",
+    label: "Cobalt",
+    colors: ["#1d4ed8", "#3b82f6"],
+    css: "brightness(0.95) saturate(0.75) contrast(1.2) hue-rotate(202deg)",
+  },
+  {
+    key: "duotone",
+    label: "Duotone",
+    colors: ["#9333ea", "#db2777"],
+    css: "saturate(3.5) contrast(1.35) brightness(0.88) hue-rotate(285deg)",
+  },
+  {
+    key: "matrix",
+    label: "Matrix",
+    colors: ["#052e16", "#16a34a"],
+    css: "saturate(1.5) contrast(1.3) brightness(0.9) hue-rotate(100deg)",
+  },
+  {
+    key: "velours",
+    label: "Velours",
+    colors: ["#4a0e1a", "#831843"],
+    css: "brightness(0.72) contrast(1.45) saturate(1.3) hue-rotate(330deg) sepia(0.1)",
+  },
 ];
 
-const FONT_OPTIONS: Array<{ key: VideoEditorSettings['fontFamily']; label: string; css: string }> = [
-  { key: 'sans', label: 'Sans', css: 'Arial, sans-serif' },
-  { key: 'serif', label: 'Serif', css: 'Georgia, serif' },
-  { key: 'mono', label: 'Mono', css: "'Courier New', monospace" },
-  { key: 'bold', label: 'Impact', css: 'Impact, fantasy' },
+const FONT_OPTIONS: Array<{
+  key: VideoEditorSettings["fontFamily"];
+  label: string;
+  css: string;
+}> = [
+  { key: "sans", label: "Sans", css: "Arial, sans-serif" },
+  { key: "serif", label: "Serif", css: "Georgia, serif" },
+  { key: "mono", label: "Mono", css: "'Courier New', monospace" },
+  { key: "bold", label: "Impact", css: "Impact, fantasy" },
 ];
 
 const TEXT_COLORS = [
-  '#FFFFFF', '#000000', '#FFE500', '#FF3B30',
-  '#007AFF', '#34C759', '#FF2D55', '#FF9500',
-  '#AF52DE', '#5AC8FA', '#FF6B35', '#00D4AA',
+  "#FFFFFF",
+  "#000000",
+  "#FFE500",
+  "#FF3B30",
+  "#007AFF",
+  "#34C759",
+  "#FF2D55",
+  "#FF9500",
+  "#AF52DE",
+  "#5AC8FA",
+  "#FF6B35",
+  "#00D4AA",
 ];
 
-type AdjustSliderKey = 'brightness' | 'contrast' | 'saturation' | 'grain';
+type AdjustSliderKey = "brightness" | "contrast" | "saturation" | "grain";
 
 const ADJUST_SLIDERS: Array<{
   key: AdjustSliderKey;
@@ -700,10 +839,28 @@ const ADJUST_SLIDERS: Array<{
   max: number;
   icon: keyof typeof Ionicons.glyphMap;
 }> = [
-  { key: 'brightness', label: 'Luminosité', min: 50, max: 150, icon: 'sunny-outline' },
-  { key: 'contrast', label: 'Contraste', min: 50, max: 150, icon: 'contrast-outline' },
-  { key: 'saturation', label: 'Saturation', min: 0, max: 200, icon: 'color-palette-outline' },
-  { key: 'grain', label: 'Grain', min: 0, max: 100, icon: 'sparkles-outline' },
+  {
+    key: "brightness",
+    label: "Luminosité",
+    min: 50,
+    max: 150,
+    icon: "sunny-outline",
+  },
+  {
+    key: "contrast",
+    label: "Contraste",
+    min: 50,
+    max: 150,
+    icon: "contrast-outline",
+  },
+  {
+    key: "saturation",
+    label: "Saturation",
+    min: 0,
+    max: 200,
+    icon: "color-palette-outline",
+  },
+  { key: "grain", label: "Grain", min: 0, max: 100, icon: "sparkles-outline" },
 ];
 
 interface Props {
@@ -716,6 +873,11 @@ interface Props {
   coverImageUrl?: string | null;
   /** Titre du morceau pour l’end card (placeholder). */
   defaultEndCardTitle?: string;
+  /**
+   * Remplace la colonne preview vidéo (ex. waveform + hook sur la gauche).
+   * Sur le web, une vidéo masquée garde le même `videoUrl` pour les miniatures des filtres.
+   */
+  previewSlot?: React.ReactNode;
 }
 
 const TAB_DEFS: Array<{
@@ -724,55 +886,65 @@ const TAB_DEFS: Array<{
   shortLabel: string;
   icon: keyof typeof Ionicons.glyphMap;
 }> = [
-  { id: 'filters', label: 'Filtres + réglages', shortLabel: 'Filtres', icon: 'color-filter-outline' },
-  { id: 'motion', label: 'Animations', shortLabel: 'Anim.', icon: 'sparkles-outline' },
-  { id: 'text', label: 'Textes', shortLabel: 'Texte', icon: 'text-outline' },
+  {
+    id: "filters",
+    label: "Filtres + réglages",
+    shortLabel: "Filtres",
+    icon: "color-filter-outline",
+  },
+  {
+    id: "motion",
+    label: "Animations",
+    shortLabel: "Anim.",
+    icon: "sparkles-outline",
+  },
+  { id: "text", label: "Textes", shortLabel: "Texte", icon: "text-outline" },
 ];
 
 function motionIconFor(key: string): keyof typeof Ionicons.glyphMap {
   const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
-    none: 'close-circle-outline',
-    halo: 'sunny-outline',
-    rimlight: 'flash-outline',
-    bloom: 'sparkles',
-    dream: 'cloud-outline',
-    mesh: 'grid-outline',
-    sheen: 'diamond-outline',
-    holo: 'color-wand-outline',
-    lensflare: 'radio-outline',
-    glass: 'layers-outline',
-    aurora: 'partly-sunny-outline',
-    dopamine: 'heart-outline',
-    prism: 'triangle-outline',
-    chromatic: 'aperture-outline',
-    stardust: 'star-outline',
-    electric: 'flash-outline',
-    neongrid: 'apps-outline',
-    liquid: 'water-outline',
-    scan: 'scan-outline',
-    vhs: 'videocam-outline',
-    noir: 'contrast-outline',
-    cinematic: 'film-outline',
-    aqua: 'rainy-outline',
-    iris: 'eye-outline',
-    tilt3d: 'cube-outline',
-    pulseblur: 'water-outline',
-    chromawave: 'pulse-outline',
-    liquify: 'git-network-outline',
-    ripple: 'radio-button-on-outline',
-    heat: 'flame-outline',
-    kenburns: 'expand-outline',
-    zoomout: 'contract-outline',
-    beat: 'musical-notes-outline',
-    pop: 'rocket-outline',
-    drift: 'navigate-outline',
-    glitch: 'bug-outline',
+    none: "close-circle-outline",
+    halo: "sunny-outline",
+    rimlight: "flash-outline",
+    bloom: "sparkles",
+    dream: "cloud-outline",
+    mesh: "grid-outline",
+    sheen: "diamond-outline",
+    holo: "color-wand-outline",
+    lensflare: "radio-outline",
+    glass: "layers-outline",
+    aurora: "partly-sunny-outline",
+    dopamine: "heart-outline",
+    prism: "triangle-outline",
+    chromatic: "aperture-outline",
+    stardust: "star-outline",
+    electric: "flash-outline",
+    neongrid: "apps-outline",
+    liquid: "water-outline",
+    scan: "scan-outline",
+    vhs: "videocam-outline",
+    noir: "contrast-outline",
+    cinematic: "film-outline",
+    aqua: "rainy-outline",
+    iris: "eye-outline",
+    tilt3d: "cube-outline",
+    pulseblur: "water-outline",
+    chromawave: "pulse-outline",
+    liquify: "git-network-outline",
+    ripple: "radio-button-on-outline",
+    heat: "flame-outline",
+    kenburns: "expand-outline",
+    zoomout: "contract-outline",
+    beat: "musical-notes-outline",
+    pop: "rocket-outline",
+    drift: "navigate-outline",
+    glitch: "bug-outline",
   };
-  return icons[key] ?? 'sparkles-outline';
+  return icons[key] ?? "sparkles-outline";
 }
 
 function panelShadow(colors: ColorPalette, strong?: boolean) {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === "web") {
     return {
       boxShadow: strong
         ? `0 0 0 1px ${colors.border}, 0 24px 48px -16px rgba(0,0,0,0.55)`
@@ -781,7 +953,7 @@ function panelShadow(colors: ColorPalette, strong?: boolean) {
   }
   return {
     elevation: strong ? 12 : 8,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: strong ? 0.35 : 0.22,
     shadowRadius: strong ? 24 : 16,
     shadowOffset: { width: 0, height: strong ? 12 : 8 },
@@ -794,36 +966,39 @@ export function VideoEditorStep({
   onChange,
   fullBleed,
   coverImageUrl,
-  defaultEndCardTitle = '',
+  defaultEndCardTitle = "",
+  previewSlot,
 }: Props) {
   const { colors } = useTheme();
   const isMobile = useIsMobile();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [thumbDataUrl, setThumbDataUrl] = useState<string | null>(null);
-  const [editorTab, setEditorTab] = useState<EditorTab>('filters');
+  const [editorTab, setEditorTab] = useState<EditorTab>("filters");
 
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-    let styleEl = document.getElementById(MOTION_STYLE_ID) as HTMLStyleElement | null;
+    if (typeof document === "undefined") return;
+    let styleEl = document.getElementById(
+      MOTION_STYLE_ID,
+    ) as HTMLStyleElement | null;
     if (!styleEl) {
-      styleEl = document.createElement('style');
+      styleEl = document.createElement("style");
       styleEl.id = MOTION_STYLE_ID;
       document.head.appendChild(styleEl);
     }
     styleEl.textContent = MOTION_CSS;
 
     if (!document.getElementById(SVG_FILTERS_ROOT_ID)) {
-      const root = document.createElement('div');
+      const root = document.createElement("div");
       root.id = SVG_FILTERS_ROOT_ID;
-      root.setAttribute('aria-hidden', 'true');
+      root.setAttribute("aria-hidden", "true");
       root.innerHTML = SVG_FILTERS_HTML;
       Object.assign(root.style, {
-        position: 'absolute',
-        width: '0',
-        height: '0',
-        overflow: 'hidden',
-        clipPath: 'inset(50%)',
-        pointerEvents: 'none',
+        position: "absolute",
+        width: "0",
+        height: "0",
+        overflow: "hidden",
+        clipPath: "inset(50%)",
+        pointerEvents: "none",
       });
       document.body.appendChild(root);
     }
@@ -833,17 +1008,17 @@ export function VideoEditorStep({
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
     try {
-      const canvas = document.createElement('canvas');
+      const canvas = document.createElement("canvas");
       const maxW = 320;
       const ratio = video.videoHeight / video.videoWidth;
       canvas.width = maxW;
       canvas.height = Math.round(maxW * ratio);
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setThumbDataUrl(canvas.toDataURL('image/jpeg', 0.7));
+      setThumbDataUrl(canvas.toDataURL("image/jpeg", 0.7));
     } catch (e) {
-      console.warn('[VideoEditor] frame capture failed:', e);
+      console.warn("[VideoEditor] frame capture failed:", e);
     }
   }, []);
 
@@ -851,66 +1026,91 @@ export function VideoEditorStep({
     setThumbDataUrl(null);
     const video = videoRef.current;
     if (!video || !videoUrl) return;
-    const onLoaded = () => { video.currentTime = Math.min(0.5, video.duration || 0.5); };
+    const onLoaded = () => {
+      video.currentTime = Math.min(0.5, video.duration || 0.5);
+    };
     const onSeeked = () => captureFrame();
-    video.addEventListener('loadeddata', onLoaded);
-    video.addEventListener('seeked', onSeeked);
-    if (video.readyState >= 2) video.currentTime = Math.min(0.5, video.duration || 0.5);
+    video.addEventListener("loadeddata", onLoaded);
+    video.addEventListener("seeked", onSeeked);
+    if (video.readyState >= 2)
+      video.currentTime = Math.min(0.5, video.duration || 0.5);
     return () => {
-      video.removeEventListener('loadeddata', onLoaded);
-      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener("loadeddata", onLoaded);
+      video.removeEventListener("seeked", onSeeked);
     };
   }, [videoUrl, captureFrame]);
 
-  const set = <K extends keyof VideoEditorSettings>(key: K, val: VideoEditorSettings[K]) =>
-    onChange({ ...settings, [key]: val });
+  const set = <K extends keyof VideoEditorSettings>(
+    key: K,
+    val: VideoEditorSettings[K],
+  ) => onChange({ ...settings, [key]: val });
 
-  const textPositionY: Record<VideoEditorSettings['textPosition'], string> = {
-    top: '8%',
-    center: '50%',
-    bottom: '82%',
+  const textPositionY: Record<VideoEditorSettings["textPosition"], string> = {
+    top: "8%",
+    center: "50%",
+    bottom: "82%",
   };
 
-  const styles = useMemo(() => makeStyles(colors, isMobile, !!fullBleed), [colors, isMobile, fullBleed]);
+  const styles = useMemo(
+    () => makeStyles(colors, isMobile, !!fullBleed),
+    [colors, isMobile, fullBleed],
+  );
 
-  const currentPreset = FILTER_PRESETS.find(p => p.key === settings.filterPreset);
-  const presetCss = currentPreset?.css ?? '';
+  const currentPreset = FILTER_PRESETS.find(
+    (p) => p.key === settings.filterPreset,
+  );
+  const presetCss = currentPreset?.css ?? "";
   const manualCss = [
-    settings.brightness !== 100 ? `brightness(${settings.brightness / 100})` : '',
-    settings.contrast !== 100   ? `contrast(${settings.contrast / 100})`     : '',
-    settings.saturation !== 100 ? `saturate(${settings.saturation / 100})`   : '',
-  ].filter(Boolean).join(' ');
-  const fullFilterCss = [presetCss, manualCss].filter(Boolean).join(' ') || 'none';
+    settings.brightness !== 100
+      ? `brightness(${settings.brightness / 100})`
+      : "",
+    settings.contrast !== 100 ? `contrast(${settings.contrast / 100})` : "",
+    settings.saturation !== 100 ? `saturate(${settings.saturation / 100})` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const fullFilterCss =
+    [presetCss, manualCss].filter(Boolean).join(" ") || "none";
 
-  const grainOpacity = settings.grain / 100 * 0.55;
-  const grainStyle = settings.grain > 0
-    ? { position: 'absolute' as const, inset: 0, backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.85\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'1\'/%3E%3C/svg%3E")', opacity: grainOpacity, pointerEvents: 'none' as const, zIndex: 2, mixBlendMode: 'overlay' as const }
-    : null;
+  const grainOpacity = (settings.grain / 100) * 0.55;
+  const grainStyle =
+    settings.grain > 0
+      ? {
+          position: "absolute" as const,
+          inset: 0,
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E\")",
+          opacity: grainOpacity,
+          pointerEvents: "none" as const,
+          zIndex: 2,
+          mixBlendMode: "overlay" as const,
+        }
+      : null;
 
   const motionWrapClass =
-    settings.motionPreset && settings.motionPreset !== 'none'
+    settings.motionPreset && settings.motionPreset !== "none"
       ? `ve-motion--${settings.motionPreset}`
-      : '';
+      : "";
 
-  const svgSurfaceFilter = SVG_FILTER_BY_MOTION[settings.motionPreset] ?? '';
+  const svgSurfaceFilter = SVG_FILTER_BY_MOTION[settings.motionPreset] ?? "";
 
   const videoSurface = (
     <>
-      {React.createElement('video', {
+      {React.createElement("video", {
         ref: videoRef,
         src: videoUrl,
-        crossOrigin: 'anonymous',
+        crossOrigin: "anonymous",
         muted: true,
         playsInline: true,
         loop: true,
         autoPlay: true,
         style: {
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          display: 'block',
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: "block",
           filter: fullFilterCss,
-          transition: 'filter 0.25s ease',
+          transition: "filter 0.25s ease",
         },
       })}
       {grainStyle && <View style={grainStyle} />}
@@ -919,73 +1119,111 @@ export function VideoEditorStep({
 
   const videoInner = svgSurfaceFilter
     ? React.createElement(
-        'div',
+        "div",
         {
           style: {
-            width: '100%',
-            height: '100%',
-            position: 'relative' as const,
+            width: "100%",
+            height: "100%",
+            position: "relative" as const,
             filter: svgSurfaceFilter,
-            isolation: 'isolate' as const,
+            isolation: "isolate" as const,
           },
         },
-        videoSurface
+        videoSurface,
       )
     : videoSurface;
 
-  const previewCore = (
-    <View style={styles.previewStack}>
-    <View style={styles.previewFrame}>
+  const previewFrameInner = (
+    <>
       {React.createElement(
-        'div',
+        "div",
         {
           className: motionWrapClass || undefined,
-          style: { width: '100%', height: '100%', position: 'relative' as const },
+          style: {
+            width: "100%",
+            height: "100%",
+            position: "relative" as const,
+          },
         },
         React.createElement(
-          'div',
-          { className: 've-motion-inner', style: { width: '100%', height: '100%' } },
-          videoInner
-        )
+          "div",
+          {
+            className: "ve-motion-inner",
+            style: { width: "100%", height: "100%" },
+          },
+          videoInner,
+        ),
       )}
       {settings.text.length > 0 && (
         <View
           style={{
-            position: 'absolute',
+            position: "absolute",
             left: 12,
             right: 12,
             top: textPositionY[settings.textPosition] as any,
-            transform: settings.textPosition === 'center' ? [{ translateY: -20 }] : [],
+            transform:
+              settings.textPosition === "center" ? [{ translateY: -20 }] : [],
             zIndex: 10,
-            alignItems: 'center',
+            alignItems: "center",
           }}
         >
           <Text
-            style={{
-              fontFamily: FONT_OPTIONS.find(f => f.key === settings.fontFamily)?.css ?? 'Arial',
-              fontSize: settings.fontSize * 0.55,
-              color: settings.fontColor,
-              textAlign: 'center',
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-              backgroundColor: settings.textBgColor === 'transparent'
-                ? 'transparent'
-                : hexToRgba(settings.textBgColor, settings.textBgOpacity),
-              borderRadius: 4,
-              overflow: 'hidden',
-            } as any}
+            style={
+              {
+                fontFamily:
+                  FONT_OPTIONS.find((f) => f.key === settings.fontFamily)
+                    ?.css ?? "Arial",
+                fontSize: settings.fontSize * 0.55,
+                color: settings.fontColor,
+                textAlign: "center",
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                backgroundColor:
+                  settings.textBgColor === "transparent"
+                    ? "transparent"
+                    : hexToRgba(settings.textBgColor, settings.textBgOpacity),
+                borderRadius: 4,
+                overflow: "hidden",
+              } as any
+            }
           >
             {settings.text}
           </Text>
         </View>
       )}
-    </View>
+    </>
+  );
+
+  const previewCore = (
+    <View style={styles.previewStack}>
+      <View style={styles.previewFrame}>{previewFrameInner}</View>
     </View>
   );
 
-  const renderPresetGrid = (gridStyle: object, swatchHeight: number, narrowCards?: boolean) => (
+  /** Même rendu que dans previewFrame, pour l’intégrer dans WaveformHookPicker (filtres / anim / texte). */
+  const editorHookPreviewLayer = (
+    <View
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        overflow: "hidden",
+      }}
+      pointerEvents="box-none"
+    >
+      {previewFrameInner}
+    </View>
+  );
+
+  const renderPresetGrid = (
+    gridStyle: object,
+    swatchHeight: number,
+    narrowCards?: boolean,
+  ) => (
     <View style={gridStyle}>
-      {FILTER_PRESETS.map(preset => {
+      {FILTER_PRESETS.map((preset) => {
         const isActive = settings.filterPreset === preset.key;
         return (
           <TouchableOpacity
@@ -993,27 +1231,52 @@ export function VideoEditorStep({
             style={[
               styles.filterCard,
               narrowCards && styles.filterCardNarrow,
-              { borderColor: colors.border, backgroundColor: colors.bgElevated },
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.bgElevated,
+              },
               isActive && {
                 borderColor: colors.primary,
                 backgroundColor: colors.primaryBg,
                 ...panelShadow(colors, false),
               },
             ]}
-            onPress={() => set('filterPreset', preset.key)}
+            onPress={() => set("filterPreset", preset.key)}
             activeOpacity={0.85}
           >
-            <View style={[styles.filterSwatch, { overflow: 'hidden', height: swatchHeight }]}>
+            <View
+              style={[
+                styles.filterSwatch,
+                { overflow: "hidden", height: swatchHeight },
+              ]}
+            >
               {thumbDataUrl
-                ? React.createElement('img', {
+                ? React.createElement("img", {
                     src: thumbDataUrl,
-                    style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: preset.css || 'none' },
+                    style: {
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block",
+                      filter: preset.css || "none",
+                    },
                   })
-                : React.createElement('div', {
-                    style: { width: '100%', height: '100%', background: `linear-gradient(135deg, ${preset.colors[0]}, ${preset.colors[1]})` },
+                : React.createElement("div", {
+                    style: {
+                      width: "100%",
+                      height: "100%",
+                      background: `linear-gradient(135deg, ${preset.colors[0]}, ${preset.colors[1]})`,
+                    },
                   })}
             </View>
-            <Text style={[styles.filterLabel, { color: colors.textSecondary }, isActive && { color: colors.primary }]} numberOfLines={1}>
+            <Text
+              style={[
+                styles.filterLabel,
+                { color: colors.textSecondary },
+                isActive && { color: colors.primary },
+              ]}
+              numberOfLines={1}
+            >
               {preset.label}
             </Text>
           </TouchableOpacity>
@@ -1026,37 +1289,52 @@ export function VideoEditorStep({
     <View style={styles.adjustSlidersWrap}>
       {ADJUST_SLIDERS.map(({ key, label, min, max, icon }) => {
         const val = settings[key] as number;
-        const defaultVal = key === 'grain' ? 0 : 100;
+        const defaultVal = key === "grain" ? 0 : 100;
         const isModified = val !== defaultVal;
-        const valueStr = key === 'grain' ? String(val) : `${val}%`;
+        const valueStr = key === "grain" ? String(val) : `${val}%`;
         return (
           <View key={key} style={styles.sliderRow}>
             <View style={styles.sliderRowHeader}>
               <View style={styles.sliderLabelGroup}>
-                <Ionicons name={icon} size={16} color={isModified ? colors.primary : colors.textMuted} />
+                <Ionicons
+                  name={icon}
+                  size={16}
+                  color={isModified ? colors.primary : colors.textMuted}
+                />
                 <Text
-                  style={[styles.sliderRowTitle, { color: colors.textPrimary }, isModified && { color: colors.primary }]}
+                  style={[
+                    styles.sliderRowTitle,
+                    { color: colors.textPrimary },
+                    isModified && { color: colors.primary },
+                  ]}
                   numberOfLines={1}
                 >
                   {label}
                 </Text>
               </View>
-              <Text style={[styles.sliderRowValue, { color: isModified ? colors.primary : colors.textMuted }]}>{valueStr}</Text>
+              <Text
+                style={[
+                  styles.sliderRowValue,
+                  { color: isModified ? colors.primary : colors.textMuted },
+                ]}
+              >
+                {valueStr}
+              </Text>
             </View>
-            {React.createElement('input', {
-              type: 'range',
+            {React.createElement("input", {
+              type: "range",
               min,
               max,
               step: 1,
               value: val,
               onChange: (e: any) => set(key, parseInt(e.target.value, 10)),
               style: {
-                width: '100%',
-                display: 'block',
+                width: "100%",
+                display: "block",
                 marginTop: 8,
                 height: 22,
                 accentColor: colors.primary,
-                cursor: 'pointer',
+                cursor: "pointer",
               } as object,
             })}
           </View>
@@ -1067,9 +1345,18 @@ export function VideoEditorStep({
 
   const filtersPanelStacked = (
     <View style={[styles.tabPanel, styles.tabPanelFill]}>
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>Presets</Text>
+      <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>
+        Presets
+      </Text>
       {renderPresetGrid(styles.filterGrid, isMobile ? 52 : 72)}
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted, marginTop: spacing.lg }]}>Lumière & texture</Text>
+      <Text
+        style={[
+          styles.fxSectionTitle,
+          { color: colors.textMuted, marginTop: spacing.lg },
+        ]}
+      >
+        Lumière & texture
+      </Text>
       {renderAdjustSliders()}
     </View>
   );
@@ -1088,12 +1375,12 @@ export function VideoEditorStep({
             },
             isActive && { borderColor: colors.primary },
             isActive &&
-              Platform.OS === 'web' &&
+              Platform.OS === "web" &&
               ({
                 boxShadow: `0 0 0 2px ${colors.primary}45, 0 14px 32px -12px ${colors.primary}40`,
               } as const),
           ]}
-          onPress={() => set('motionPreset', m.key)}
+          onPress={() => set("motionPreset", m.key)}
           activeOpacity={0.88}
           accessibilityLabel={`${m.label}. ${m.subtitle}`}
         >
@@ -1106,29 +1393,66 @@ export function VideoEditorStep({
               },
             ]}
           >
-            <Ionicons name={motionIconFor(m.key)} size={22} color={isActive ? colors.primary : colors.textSecondary} />
+            <Ionicons
+              name={motionIconFor(m.key)}
+              size={22}
+              color={isActive ? colors.primary : colors.textSecondary}
+            />
           </View>
           <Text
-            style={[styles.fxTileLabel, { color: colors.textSecondary }, isActive && { color: colors.primary, fontFamily: fonts.semiBold }]}
+            style={[
+              styles.fxTileLabel,
+              { color: colors.textSecondary },
+              isActive && { color: colors.primary, fontFamily: fonts.semiBold },
+            ]}
             numberOfLines={2}
           >
             {m.label}
           </Text>
-          {isActive ? <View style={[styles.fxTileDot, { backgroundColor: colors.primary }]} /> : <View style={styles.fxTileDotSpacer} />}
+          {isActive ? (
+            <View
+              style={[styles.fxTileDot, { backgroundColor: colors.primary }]}
+            />
+          ) : (
+            <View style={styles.fxTileDotSpacer} />
+          )}
         </TouchableOpacity>
       );
     });
 
   const motionPanel = (
     <View style={[styles.tabPanel, styles.tabPanelFill]}>
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>Lo-fi & ciné</Text>
-      <View style={styles.fxGrid}>{renderMotionTiles(MOTION_PRESETS_LOFI)}</View>
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted, marginTop: spacing.lg }]}>Autres</Text>
-      <View style={styles.fxGrid}>{renderMotionTiles(MOTION_PRESETS_OTHER)}</View>
-      <View style={[styles.fxFootnote, { backgroundColor: colors.bgCard, borderColor: colors.borderLight }]}>
-        <Ionicons name="phone-portrait-outline" size={12} color={colors.textMuted} />
+      <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>
+        Lo-fi & ciné
+      </Text>
+      <View style={styles.fxGrid}>
+        {renderMotionTiles(MOTION_PRESETS_LOFI)}
+      </View>
+      <Text
+        style={[
+          styles.fxSectionTitle,
+          { color: colors.textMuted, marginTop: spacing.lg },
+        ]}
+      >
+        Autres
+      </Text>
+      <View style={styles.fxGrid}>
+        {renderMotionTiles(MOTION_PRESETS_OTHER)}
+      </View>
+      <View
+        style={[
+          styles.fxFootnote,
+          { backgroundColor: colors.bgCard, borderColor: colors.borderLight },
+        ]}
+      >
+        <Ionicons
+          name="phone-portrait-outline"
+          size={12}
+          color={colors.textMuted}
+        />
         <Text style={[styles.fxFootnoteText, { color: colors.textMuted }]}>
-          Animations : aperçu web · l’export applique filtres couleur, grain et fin de clip (cover).
+          Animations : aperçu web · l’export applique filtres couleur, grain et
+          fin de clip (cover).
         </Text>
       </View>
     </View>
@@ -1136,60 +1460,95 @@ export function VideoEditorStep({
 
   const textPanel = (
     <View style={[styles.tabPanel, styles.tabPanelFill]}>
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>Contenu</Text>
-      {React.createElement('input', {
-        type: 'text',
+      <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>
+        Contenu
+      </Text>
+      {React.createElement("input", {
+        type: "text",
         value: settings.text,
-        placeholder: 'Ton message sur la vidéo…',
-        onChange: (e: any) => set('text', e.target.value),
+        placeholder: "Ton message sur la vidéo…",
+        onChange: (e: any) => set("text", e.target.value),
         style: {
-          width: '100%',
-          padding: '14px 16px',
+          width: "100%",
+          padding: "14px 16px",
           borderRadius: radius.lg,
           border: `1px solid ${colors.border}`,
           backgroundColor: colors.bgCard,
           color: colors.textPrimary,
-          fontFamily: 'inherit',
+          fontFamily: "inherit",
           fontSize: 15,
-          outline: 'none',
-          boxSizing: 'border-box',
+          outline: "none",
+          boxSizing: "border-box",
           marginBottom: spacing.lg,
         },
       })}
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted, marginBottom: spacing.sm }]}>Police</Text>
+      <Text
+        style={[
+          styles.fxSectionTitle,
+          { color: colors.textMuted, marginBottom: spacing.sm },
+        ]}
+      >
+        Police
+      </Text>
       <View style={styles.textStyleRow}>
-        {FONT_OPTIONS.map(f => (
+        {FONT_OPTIONS.map((f) => (
           <TouchableOpacity
             key={f.key}
             style={[
               styles.textStyleChip,
               { borderColor: colors.border, backgroundColor: colors.bgCard },
-              settings.fontFamily === f.key && { borderColor: colors.primary, backgroundColor: colors.primaryBg },
+              settings.fontFamily === f.key && {
+                borderColor: colors.primary,
+                backgroundColor: colors.primaryBg,
+              },
             ]}
-            onPress={() => set('fontFamily', f.key)}
+            onPress={() => set("fontFamily", f.key)}
           >
-            <Text style={[styles.textStyleChipLabel, { color: colors.textSecondary }, settings.fontFamily === f.key && { color: colors.primary }, { fontFamily: f.css as any }]}>
+            <Text
+              style={[
+                styles.textStyleChipLabel,
+                { color: colors.textSecondary },
+                settings.fontFamily === f.key && { color: colors.primary },
+                { fontFamily: f.css as any },
+              ]}
+            >
               {f.label}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted, marginTop: spacing.lg }]}>Taille</Text>
+      <Text
+        style={[
+          styles.fxSectionTitle,
+          { color: colors.textMuted, marginTop: spacing.lg },
+        ]}
+      >
+        Taille
+      </Text>
       <View style={styles.textSizeRow}>
-        <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>{settings.fontSize}px</Text>
-        {React.createElement('input', {
-          type: 'range',
+        <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>
+          {settings.fontSize}px
+        </Text>
+        {React.createElement("input", {
+          type: "range",
           min: 20,
           max: 80,
           step: 2,
           value: settings.fontSize,
-          onChange: (e: any) => set('fontSize', parseInt(e.target.value)),
+          onChange: (e: any) => set("fontSize", parseInt(e.target.value)),
           style: { flex: 1, accentColor: colors.primary, minWidth: 0 },
         })}
       </View>
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted, marginTop: spacing.lg }]}>Couleur</Text>
+      <Text
+        style={[
+          styles.fxSectionTitle,
+          { color: colors.textMuted, marginTop: spacing.lg },
+        ]}
+      >
+        Couleur
+      </Text>
       <View style={styles.colorRow}>
-        {TEXT_COLORS.map(c => (
+        {TEXT_COLORS.map((c) => (
           <TouchableOpacity
             key={c}
             style={[
@@ -1198,30 +1557,57 @@ export function VideoEditorStep({
               settings.fontColor === c && styles.colorSwatchLgActive,
               settings.fontColor === c && { borderColor: colors.primary },
             ]}
-            onPress={() => set('fontColor', c)}
+            onPress={() => set("fontColor", c)}
           />
         ))}
       </View>
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted, marginTop: spacing.lg }]}>Position</Text>
+      <Text
+        style={[
+          styles.fxSectionTitle,
+          { color: colors.textMuted, marginTop: spacing.lg },
+        ]}
+      >
+        Position
+      </Text>
       <View style={styles.textStyleRow}>
-        {(['top', 'center', 'bottom'] as const).map(p => (
+        {(["top", "center", "bottom"] as const).map((p) => (
           <TouchableOpacity
             key={p}
             style={[
               styles.textStyleChip,
-              { borderColor: colors.border, backgroundColor: colors.bgCard, flex: 1 },
-              settings.textPosition === p && { borderColor: colors.primary, backgroundColor: colors.primaryBg },
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.bgCard,
+                flex: 1,
+              },
+              settings.textPosition === p && {
+                borderColor: colors.primary,
+                backgroundColor: colors.primaryBg,
+              },
             ]}
-            onPress={() => set('textPosition', p)}
+            onPress={() => set("textPosition", p)}
           >
-            <Text style={[styles.textStyleChipLabel, { color: colors.textSecondary }, settings.textPosition === p && { color: colors.primary }]}>
-              {p === 'top' ? 'Haut' : p === 'center' ? 'Milieu' : 'Bas'}
+            <Text
+              style={[
+                styles.textStyleChipLabel,
+                { color: colors.textSecondary },
+                settings.textPosition === p && { color: colors.primary },
+              ]}
+            >
+              {p === "top" ? "Haut" : p === "center" ? "Milieu" : "Bas"}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      <Text style={[styles.fxSectionTitle, { color: colors.textMuted, marginTop: spacing.lg }]}>Fin de clip</Text>
+      <Text
+        style={[
+          styles.fxSectionTitle,
+          { color: colors.textMuted, marginTop: spacing.lg },
+        ]}
+      >
+        Fin de clip
+      </Text>
       <TouchableOpacity
         onPress={() => {
           const next = !settings.endCardEnabled;
@@ -1233,30 +1619,41 @@ export function VideoEditorStep({
                 ? coverImageUrl.trim()
                 : settings.endCardCoverUrl,
             endCardTitle:
-              next && !settings.endCardTitle?.trim() && defaultEndCardTitle.trim()
+              next &&
+              !settings.endCardTitle?.trim() &&
+              defaultEndCardTitle.trim()
                 ? defaultEndCardTitle.trim()
                 : settings.endCardTitle,
           });
         }}
         activeOpacity={0.85}
         style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
           paddingVertical: spacing.sm,
           paddingHorizontal: spacing.md,
           borderRadius: radius.lg,
           borderWidth: 1,
           borderColor: settings.endCardEnabled ? colors.primary : colors.border,
-          backgroundColor: settings.endCardEnabled ? colors.primaryBg : colors.bgCard,
+          backgroundColor: settings.endCardEnabled
+            ? colors.primaryBg
+            : colors.bgCard,
           marginBottom: settings.endCardEnabled ? spacing.md : 0,
         }}
       >
-        <Text style={{ fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textPrimary, flex: 1 }}>
+        <Text
+          style={{
+            fontFamily: fonts.medium,
+            fontSize: fontSize.sm,
+            color: colors.textPrimary,
+            flex: 1,
+          }}
+        >
           Overlay cover + titre (export)
         </Text>
         <Ionicons
-          name={settings.endCardEnabled ? 'checkbox' : 'square-outline'}
+          name={settings.endCardEnabled ? "checkbox" : "square-outline"}
           size={22}
           color={settings.endCardEnabled ? colors.primary : colors.textMuted}
         />
@@ -1266,45 +1663,58 @@ export function VideoEditorStep({
           <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>
             Durée overlay : {settings.endCardDurationSec}s
           </Text>
-          {React.createElement('input', {
-            type: 'range',
+          {React.createElement("input", {
+            type: "range",
             min: 1,
             max: 8,
             step: 1,
             value: settings.endCardDurationSec,
-            onChange: (e: any) => set('endCardDurationSec', parseInt(e.target.value, 10)),
-            style: { width: '100%', accentColor: colors.primary },
+            onChange: (e: any) =>
+              set("endCardDurationSec", parseInt(e.target.value, 10)),
+            style: { width: "100%", accentColor: colors.primary },
           })}
           <TouchableOpacity
-            onPress={() => set('endCardShowTitle', !settings.endCardShowTitle)}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}
+            onPress={() => set("endCardShowTitle", !settings.endCardShowTitle)}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing.sm,
+            }}
             activeOpacity={0.8}
           >
             <Ionicons
-              name={settings.endCardShowTitle ? 'checkbox' : 'square-outline'}
+              name={settings.endCardShowTitle ? "checkbox" : "square-outline"}
               size={20}
-              color={settings.endCardShowTitle ? colors.primary : colors.textMuted}
+              color={
+                settings.endCardShowTitle ? colors.primary : colors.textMuted
+              }
             />
-            <Text style={{ fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSecondary }}>
+            <Text
+              style={{
+                fontFamily: fonts.regular,
+                fontSize: fontSize.sm,
+                color: colors.textSecondary,
+              }}
+            >
               Afficher le titre sur la cover
             </Text>
           </TouchableOpacity>
-          {React.createElement('input', {
-            type: 'text',
+          {React.createElement("input", {
+            type: "text",
             value: settings.endCardTitle,
-            placeholder: defaultEndCardTitle || 'Titre du morceau',
-            onChange: (e: any) => set('endCardTitle', e.target.value),
+            placeholder: defaultEndCardTitle || "Titre du morceau",
+            onChange: (e: any) => set("endCardTitle", e.target.value),
             style: {
-              width: '100%',
-              padding: '12px 14px',
+              width: "100%",
+              padding: "12px 14px",
               borderRadius: radius.lg,
               border: `1px solid ${colors.border}`,
               backgroundColor: colors.bgCard,
               color: colors.textPrimary,
-              fontFamily: 'inherit',
+              fontFamily: "inherit",
               fontSize: 14,
-              outline: 'none',
-              boxSizing: 'border-box',
+              outline: "none",
+              boxSizing: "border-box",
             },
           })}
         </View>
@@ -1322,12 +1732,21 @@ export function VideoEditorStep({
     >
       <View style={styles.sidePanelHeader}>
         <View style={styles.sidePanelHeaderText}>
-          <Text style={[styles.sidePanelTitle, { color: colors.textPrimary }]}>Édition</Text>
-          <Text style={[styles.sidePanelSubtitle, { color: colors.textMuted }]}>Filtres, animations & textes</Text>
+          <Text style={[styles.sidePanelTitle, { color: colors.textPrimary }]}>
+            Édition
+          </Text>
+          <Text style={[styles.sidePanelSubtitle, { color: colors.textMuted }]}>
+            Filtres, animations & textes
+          </Text>
         </View>
       </View>
-      <View style={[styles.tabBarTrack, { backgroundColor: colors.bg, borderColor: colors.borderLight }]}>
-        {TAB_DEFS.map(tab => {
+      <View
+        style={[
+          styles.tabBarTrack,
+          { backgroundColor: colors.bg, borderColor: colors.borderLight },
+        ]}
+      >
+        {TAB_DEFS.map((tab) => {
           const active = editorTab === tab.id;
           const tabLabel = isMobile ? tab.shortLabel : tab.label;
           return (
@@ -1341,12 +1760,19 @@ export function VideoEditorStep({
               onPress={() => setEditorTab(tab.id)}
               activeOpacity={0.88}
             >
-              <Ionicons name={tab.icon} size={isMobile ? 14 : 17} color={active ? colors.primary : colors.textMuted} />
+              <Ionicons
+                name={tab.icon}
+                size={isMobile ? 14 : 17}
+                color={active ? colors.primary : colors.textMuted}
+              />
               <Text
                 style={[
                   styles.tabSegmentLabel,
                   { color: colors.textMuted },
-                  active && { color: colors.primary, fontFamily: fonts.semiBold },
+                  active && {
+                    color: colors.primary,
+                    fontFamily: fonts.semiBold,
+                  },
                 ]}
                 numberOfLines={1}
               >
@@ -1357,23 +1783,36 @@ export function VideoEditorStep({
         })}
       </View>
       <View style={styles.sidePanelBody}>
-        {editorTab === 'filters' && !isMobile ? (
+        {editorTab === "filters" && !isMobile ? (
           <View style={styles.filtersTwoColRow}>
             <ScrollView
               style={styles.filtersColScroll}
               contentContainerStyle={styles.filtersColScrollContent}
               showsVerticalScrollIndicator={false}
             >
-              <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>Presets</Text>
+              <Text
+                style={[styles.fxSectionTitle, { color: colors.textMuted }]}
+              >
+                Presets
+              </Text>
               {renderPresetGrid(styles.filterGridNarrow, 56, true)}
             </ScrollView>
-            <View style={[styles.filtersColDivider, { backgroundColor: colors.border }]} />
+            <View
+              style={[
+                styles.filtersColDivider,
+                { backgroundColor: colors.border },
+              ]}
+            />
             <ScrollView
               style={styles.filtersColScroll}
               contentContainerStyle={styles.filtersColScrollContent}
               showsVerticalScrollIndicator={false}
             >
-              <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>Lumière & texture</Text>
+              <Text
+                style={[styles.fxSectionTitle, { color: colors.textMuted }]}
+              >
+                Lumière & texture
+              </Text>
               {renderAdjustSliders()}
             </ScrollView>
           </View>
@@ -1383,20 +1822,77 @@ export function VideoEditorStep({
             contentContainerStyle={styles.sideScrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {editorTab === 'filters' && filtersPanelStacked}
-            {editorTab === 'motion' && motionPanel}
-            {editorTab === 'text' && textPanel}
+            {editorTab === "filters" && filtersPanelStacked}
+            {editorTab === "motion" && motionPanel}
+            {editorTab === "text" && textPanel}
           </ScrollView>
         )}
       </View>
     </View>
   );
 
+  const editorWithHookSlot = previewSlot != null && !isMobile;
+
+  const previewSlotResolved =
+    previewSlot != null &&
+    Platform.OS === "web" &&
+    React.isValidElement(previewSlot)
+      ? React.cloneElement(previewSlot as React.ReactElement<any>, {
+          editorPreview: editorHookPreviewLayer,
+          sharedVideoRef: videoRef,
+        })
+      : previewSlot;
+
   return (
     <View style={[styles.shell, { backgroundColor: colors.bg }]}>
-      <View style={[styles.mainRow, isMobile && styles.mainRowMobile]}>
-        <View style={styles.videoCol}>{previewCore}</View>
-        {sidePanel}
+      <View
+        style={[
+          styles.mainRow,
+          isMobile && styles.mainRowMobile,
+          editorWithHookSlot
+            ? ({ paddingHorizontal: spacing.md, gap: spacing.sm } as const)
+            : null,
+        ]}
+      >
+        <View
+          style={[
+            styles.videoCol,
+            previewSlot != null ? { position: "relative" as const } : null,
+            editorWithHookSlot
+              ? { flexGrow: 1, flexBasis: 0, flexShrink: 1 }
+              : null,
+          ]}
+        >
+          {previewSlot != null ? (
+            <View
+              style={{
+                flex: 1,
+                minHeight: 0,
+                width: "100%",
+                alignSelf: "stretch",
+              }}
+            >
+              {previewSlotResolved}
+            </View>
+          ) : (
+            previewCore
+          )}
+        </View>
+        <View
+          style={
+            editorWithHookSlot
+              ? ({
+                  flex: 1,
+                  flexGrow: 1.48,
+                  flexBasis: 0,
+                  flexShrink: 1,
+                  minWidth: 0,
+                } as const)
+              : undefined
+          }
+        >
+          {sidePanel}
+        </View>
       </View>
     </View>
   );
@@ -1409,63 +1905,76 @@ function hexToRgba(hex: string, opacity: number): string {
   return `rgba(${r},${g},${b},${opacity})`;
 }
 
-const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean) =>
+const makeStyles = (
+  colors: ColorPalette,
+  isMobile: boolean,
+  fullBleed: boolean,
+) =>
   StyleSheet.create({
     shell: {
       flex: 1,
-      width: '100%' as any,
-      alignSelf: 'stretch',
-      flexDirection: 'column',
+      width: "100%" as any,
+      alignSelf: "stretch",
+      flexDirection: "column",
       minHeight: 0,
     },
     mainRow: {
       flex: 1,
       minHeight: 0,
-      flexDirection: 'row',
-      gap: spacing.lg,
-      paddingHorizontal: spacing.md,
-      paddingTop: spacing.md,
-      paddingBottom: spacing.sm,
-      alignItems: 'stretch',
-      justifyContent: 'flex-start',
+      flexDirection: "row",
+      gap: fullBleed ? spacing.md : spacing.lg,
+      paddingHorizontal: fullBleed ? spacing.lg : spacing.md,
+      paddingTop: fullBleed ? spacing.xs : spacing.md,
+      paddingBottom: fullBleed ? spacing.md : spacing.sm,
+      alignItems: "stretch",
+      justifyContent: "flex-start",
     },
     mainRowMobile: {
-      flexDirection: 'column',
-      alignItems: 'stretch',
+      flexDirection: "column",
+      alignItems: "stretch",
       gap: spacing.md,
     },
     videoCol: {
-      flexGrow: 0,
-      flexShrink: 0,
-      alignItems: 'flex-start',
-      position: 'relative',
+      flexGrow: fullBleed && !isMobile ? 1 : 0,
+      flexShrink: 1,
+      flexBasis: fullBleed && !isMobile ? 0 : undefined,
+      alignItems: "center",
+      justifyContent: fullBleed && !isMobile ? "center" : "flex-start",
+      position: "relative",
       paddingTop: 0,
       paddingRight: isMobile ? 0 : spacing.sm,
+      minWidth: 0,
       ...(isMobile
-        ? { width: '100%' as const, maxWidth: '100%' as const }
-        : { maxWidth: fullBleed ? 420 : 340 }),
+        ? { width: "100%" as const, maxWidth: "100%" as const }
+        : {
+            minWidth: fullBleed ? 200 : undefined,
+            maxWidth: fullBleed ? undefined : 340,
+          }),
     },
     previewStack: {
-      alignItems: 'flex-start',
-      width: '100%',
+      alignItems: "flex-start",
+      width: "100%",
     },
     previewFrame: {
       aspectRatio: 9 / 16,
-      width: '100%',
-      maxWidth: isMobile ? 400 : fullBleed ? 400 : 320,
+      width: "100%",
+      maxWidth: isMobile ? 400 : fullBleed ? 560 : 320,
+      ...(fullBleed && !isMobile && Platform.OS === "web"
+        ? { maxHeight: "calc(100vh - 220px)" as any }
+        : {}),
       borderRadius: radius.xl,
-      overflow: 'hidden',
-      backgroundColor: '#0a0a0f',
-      position: 'relative',
+      overflow: "hidden",
+      backgroundColor: "#0a0a0f",
+      position: "relative",
       borderWidth: 1,
       borderColor: colors.border,
-      ...(Platform.OS === 'web'
+      ...(Platform.OS === "web"
         ? ({
             boxShadow: `0 0 0 1px ${colors.borderLight}, 0 28px 56px -12px rgba(0,0,0,0.65), 0 12px 24px -8px rgba(0,0,0,0.45)`,
           } as const)
         : {
             elevation: 16,
-            shadowColor: '#000',
+            shadowColor: "#000",
             shadowOpacity: 0.45,
             shadowRadius: 28,
             shadowOffset: { width: 0, height: 16 },
@@ -1473,27 +1982,27 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
     },
     sidePanel: {
       flex: isMobile ? 0 : 1,
-      flexDirection: 'column',
+      flexDirection: "column",
       minWidth: 0,
       minHeight: 0,
-      width: isMobile ? ('100%' as any) : undefined,
-      maxWidth: '100%' as any,
+      width: isMobile ? ("100%" as any) : undefined,
+      maxWidth: "100%" as any,
       borderRadius: radius.xl,
       borderWidth: 1,
-      overflow: 'hidden',
-      alignSelf: 'stretch',
+      overflow: "hidden",
+      alignSelf: "stretch",
       maxHeight: isMobile ? 400 : undefined,
     },
     sidePanelBody: {
       flex: 1,
       minHeight: 0,
-      width: '100%' as any,
+      width: "100%" as any,
     },
     filtersTwoColRow: {
       flex: 1,
-      flexDirection: 'row',
-      alignItems: 'stretch',
-      width: '100%' as any,
+      flexDirection: "row",
+      alignItems: "stretch",
+      width: "100%" as any,
       minHeight: 0,
     },
     filtersColScroll: {
@@ -1507,7 +2016,7 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
     },
     filtersColDivider: {
       width: 1,
-      alignSelf: 'stretch',
+      alignSelf: "stretch",
       opacity: 0.85,
     },
     sidePanelHeader: {
@@ -1531,7 +2040,7 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
     },
     tabBarTrack: {
       flexShrink: 0,
-      flexDirection: 'row',
+      flexDirection: "row",
       marginHorizontal: isMobile ? spacing.xs : spacing.md,
       marginBottom: spacing.md,
       padding: 4,
@@ -1541,9 +2050,9 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
     },
     tabSegment: {
       flex: 1,
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
       gap: 3,
       paddingVertical: isMobile ? 8 : 10,
       paddingHorizontal: 2,
@@ -1552,11 +2061,11 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
       minWidth: 0,
     },
     tabSegmentActive:
-      Platform.OS === 'web'
-        ? ({ boxShadow: '0 2px 10px rgba(0,0,0,0.14)' } as const)
+      Platform.OS === "web"
+        ? ({ boxShadow: "0 2px 10px rgba(0,0,0,0.14)" } as const)
         : {
             elevation: 4,
-            shadowColor: '#000',
+            shadowColor: "#000",
             shadowOpacity: 0.12,
             shadowRadius: 8,
             shadowOffset: { width: 0, height: 2 },
@@ -1564,14 +2073,12 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
     tabSegmentLabel: {
       fontFamily: fonts.medium,
       fontSize: isMobile ? 9 : 11,
-      textAlign: 'center',
+      textAlign: "center",
     },
-    sideScroll: isMobile
-      ? { maxHeight: 320 }
-      : { flex: 1, minHeight: 0 },
+    sideScroll: isMobile ? { maxHeight: 320 } : { flex: 1, minHeight: 0 },
     sideScrollContent: {
       flexGrow: 1,
-      width: '100%' as any,
+      width: "100%" as any,
       paddingBottom: spacing.lg,
     },
     tabPanel: {
@@ -1581,26 +2088,26 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
     },
     tabPanelFill: {
       flexGrow: 1,
-      width: '100%' as any,
+      width: "100%" as any,
       minHeight: 0,
     },
     adjustSlidersWrap: {
-      width: '100%' as any,
+      width: "100%" as any,
       gap: spacing.md,
       paddingBottom: spacing.sm,
     },
     sliderRow: {
-      width: '100%' as any,
+      width: "100%" as any,
     },
     sliderRowHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      width: '100%' as any,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      width: "100%" as any,
     },
     sliderLabelGroup: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 10,
       flex: 1,
       minWidth: 0,
@@ -1614,33 +2121,31 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
       fontFamily: fonts.semiBold,
       fontSize: fontSize.sm,
       minWidth: 44,
-      textAlign: 'right',
+      textAlign: "right",
     },
     fxSectionTitle: {
       fontFamily: fonts.semiBold,
       fontSize: 10,
-      textTransform: 'uppercase',
+      textTransform: "uppercase",
       letterSpacing: 0.8,
       marginBottom: spacing.sm,
     },
     fxGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection: "row",
+      flexWrap: "wrap",
       gap: isMobile ? 8 : 10,
-      width: '100%' as any,
-      ...(isMobile
-        ? {}
-        : { flexGrow: 1, alignContent: 'flex-start' }),
+      width: "100%" as any,
+      ...(isMobile ? {} : { flexGrow: 1, alignContent: "flex-start" }),
     },
     fxTile: {
-      width: isMobile ? '31%' : '23.5%',
+      width: isMobile ? "31%" : "23.5%",
       minWidth: isMobile ? 72 : 88,
       borderRadius: 18,
       borderWidth: 1.5,
       paddingVertical: 12,
       paddingHorizontal: 6,
-      alignItems: 'center',
-      justifyContent: 'flex-start',
+      alignItems: "center",
+      justifyContent: "flex-start",
       minHeight: isMobile ? 104 : 112,
     },
     fxTileIconRing: {
@@ -1648,16 +2153,16 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
       height: 46,
       borderRadius: 23,
       borderWidth: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       marginBottom: 8,
     },
     fxTileLabel: {
       fontFamily: fonts.medium,
       fontSize: isMobile ? 10 : 11,
-      textAlign: 'center',
+      textAlign: "center",
       lineHeight: 14,
-      width: '100%' as any,
+      width: "100%" as any,
     },
     fxTileDot: {
       width: 5,
@@ -1671,8 +2176,8 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
       opacity: 0,
     },
     fxFootnote: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 8,
       marginTop: spacing.lg,
       paddingVertical: 10,
@@ -1687,10 +2192,10 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
       lineHeight: 15,
     },
     textStyleRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection: "row",
+      flexWrap: "wrap",
       gap: 8,
-      width: '100%' as any,
+      width: "100%" as any,
     },
     textStyleChip: {
       paddingHorizontal: spacing.md,
@@ -1703,52 +2208,57 @@ const makeStyles = (colors: ColorPalette, isMobile: boolean, fullBleed: boolean)
       fontSize: fontSize.xs,
     },
     textSizeRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: spacing.md,
-      width: '100%' as any,
+      width: "100%" as any,
     },
     filterGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection: "row",
+      flexWrap: "wrap",
       gap: isMobile ? 10 : 14,
-      width: '100%' as any,
-      alignContent: 'flex-start',
-      justifyContent: 'flex-start',
+      width: "100%" as any,
+      alignContent: "flex-start",
+      justifyContent: "flex-start",
     },
     filterGridNarrow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection: "row",
+      flexWrap: "wrap",
       gap: 8,
-      width: '100%' as any,
-      alignContent: 'flex-start',
-      justifyContent: 'flex-start',
+      width: "100%" as any,
+      alignContent: "flex-start",
+      justifyContent: "flex-start",
     },
     filterCard: {
-      width: isMobile ? '30%' : '23.5%',
+      width: isMobile ? "30%" : "23.5%",
       minWidth: isMobile ? 76 : 96,
       borderRadius: radius.lg,
-      overflow: 'hidden',
+      overflow: "hidden",
       borderWidth: 1,
     },
     filterCardNarrow: {
-      width: '47%',
+      width: "47%",
       minWidth: 0,
-      maxWidth: '48%' as any,
+      maxWidth: "48%" as any,
     },
     filterSwatch: {
-      width: '100%' as any,
-      position: 'relative',
+      width: "100%" as any,
+      position: "relative",
     },
     filterLabel: {
       fontFamily: fonts.semiBold,
       fontSize: isMobile ? 10 : 11,
-      textAlign: 'center',
+      textAlign: "center",
       paddingVertical: isMobile ? 6 : 8,
       paddingHorizontal: 4,
     },
     sliderLabel: { fontFamily: fonts.medium, fontSize: fontSize.xs },
-    colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: spacing.xs },
+    colorRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+      marginTop: spacing.xs,
+    },
     colorSwatchLg: {
       width: 32,
       height: 32,

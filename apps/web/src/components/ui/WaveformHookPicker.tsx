@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  LayoutChangeEvent,
   Platform,
+  Pressable,
   Text,
   TouchableOpacity,
   View,
@@ -9,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import type { HookSuggestion } from "@toolkit/shared";
 import { useTheme } from "../../hooks/useTheme";
+import { useIsMobile } from "../../hooks/useIsMobile";
 import { fonts, fontSize, radius, spacing } from "../../theme";
 
 /** Export produit : 5 s → 3 min ; borné aussi par la durée du fichier. */
@@ -47,6 +50,14 @@ interface Props {
   onSelect: (hook: HookSuggestion) => void;
   loading?: boolean;
   previewVideoUrl?: string;
+  /** Titre de section (ex. plage exportée) — overlay haut sur l’écran preview */
+  sectionTitle?: string;
+  /** Colonne gauche de l’éditeur : occupe la largeur/hauteur dispo (plus de maxWidth fixe centré). */
+  embedInEditorColumn?: boolean;
+  /** Preview filtrée (VideoEditorStep) : même ref vidéo que `sharedVideoRef`. */
+  editorPreview?: React.ReactNode;
+  /** Ref de la balise `<video>` éditée (filtres / anim) — fournie par VideoEditorStep. */
+  sharedVideoRef?: React.RefObject<HTMLVideoElement | null>;
 }
 
 export function WaveformHookPicker({
@@ -56,12 +67,26 @@ export function WaveformHookPicker({
   onSelect,
   loading: suggestionsLoading,
   previewVideoUrl,
+  sectionTitle,
+  embedInEditorColumn = false,
+  editorPreview,
+  sharedVideoRef,
 }: Props) {
   const { colors } = useTheme();
+  const isMobile = useIsMobile();
+  const isWideWeb = Platform.OS === "web" && !isMobile;
+
+  /** Aperçu plus large sur desktop (mode carte seule) ; en colonne éditeur = 100 % de la colonne. */
+  const previewMaxWidth = embedInEditorColumn ? undefined : isWideWeb ? 560 : 300;
+  const waveCanvasHeight = isWideWeb ? 88 : 64;
+  /** Réserve le bas pour l’overlay (waveform seule) afin que le play central ne la recouvre pas. */
+  const playTapBottomInset = 8 + waveCanvasHeight + 10;
 
   // Audio/canvas refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const getPlayVideo = () =>
+    (sharedVideoRef?.current ?? videoRef.current) as HTMLVideoElement | null;
   const waveformRef = useRef<Float32Array | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const audioBufferRef = useRef<AudioBuffer | null>(null);
@@ -82,6 +107,9 @@ export function WaveformHookPicker({
   const hasAutoplayed = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  /** En colonne éditeur : taille exacte 9:16 « téléphone » dans la zone dispo (évite le cadre quasi carré). */
+  const [embedPhonePx, setEmbedPhonePx] = useState<{ w: number; h: number } | null>(null);
+
   const [audioLoaded, setAudioLoaded] = useState(false);
   const [decoding, setDecoding] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -91,6 +119,27 @@ export function WaveformHookPicker({
 
   useEffect(() => { selectedRef.current = selected; }, [selected]);
   useEffect(() => { suggestionsRef.current = suggestions; }, [suggestions]);
+
+  const onEmbedColumnLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      if (!embedInEditorColumn) return;
+      const aw = Math.floor(e.nativeEvent.layout.width);
+      const ah = Math.floor(e.nativeEvent.layout.height);
+      if (aw < 24 || ah < 24) return;
+      let pw = Math.min(aw, Math.floor((ah * 9) / 16));
+      while (pw < aw && Math.floor(((pw + 1) * 16) / 9) <= ah) {
+        pw++;
+      }
+      const ph = Math.floor((pw * 16) / 9);
+      if (pw < 24 || ph < 24) return;
+      setEmbedPhonePx((prev) => (prev && prev.w === pw && prev.h === ph ? prev : { w: pw, h: ph }));
+    },
+    [embedInEditorColumn]
+  );
+
+  useEffect(() => {
+    if (!embedInEditorColumn) setEmbedPhonePx(null);
+  }, [embedInEditorColumn]);
 
   // Auto-preview first hook when suggestions arrive
   useEffect(() => {
@@ -308,6 +357,17 @@ export function WaveformHookPicker({
     requestAnimationFrame(drawCanvas);
   }, [selected, suggestions, drawCanvas]);
 
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(() => drawCanvas());
+    });
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [drawCanvas, decoding]);
+
   // ─── Playback ────────────────────────────────────────────────────────────────
   function stopPlayback() {
     isPlayingRef.current = false;
@@ -316,7 +376,7 @@ export function WaveformHookPicker({
     if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     setIsPlaying(false);
     setPreviewProgress(0);
-    const video = videoRef.current;
+    const video = getPlayVideo();
     if (video) { video.pause(); video.currentTime = 0; }
     drawCanvas();
   }
@@ -327,8 +387,8 @@ export function WaveformHookPicker({
 
     // Play video even without audio
     if (!actx || !buf) {
-      const video = videoRef.current;
-      if (video && previewVideoUrl) {
+      const video = getPlayVideo();
+      if (video && (previewVideoUrl || editorPreview)) {
         video.currentTime = 0;
         video.play().catch(() => {});
         setIsPlaying(true);
@@ -352,7 +412,7 @@ export function WaveformHookPicker({
         isPlayingRef.current = false;
         setIsPlaying(false);
         setPreviewProgress(0);
-        const v = videoRef.current;
+        const v = getPlayVideo();
         if (v) { v.pause(); v.currentTime = 0; }
         drawCanvas();
       }
@@ -364,8 +424,11 @@ export function WaveformHookPicker({
     isPlayingRef.current = true;
     setIsPlaying(true);
 
-    const video = videoRef.current;
-    if (video && previewVideoUrl) { video.currentTime = 0; video.play().catch(() => {}); }
+    const video = getPlayVideo();
+    if (video && (previewVideoUrl || editorPreview)) {
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    }
 
     const tick = () => {
       if (!isPlayingRef.current || !audioCtxRef.current) return;
@@ -585,153 +648,222 @@ export function WaveformHookPicker({
     );
   }
 
-  // ─── Web UI ──────────────────────────────────────────────────────────────────
-  return (
-    <View style={{ gap: spacing.md, alignItems: "center" }}>
-      {/* ── Phone mockup ── */}
-      <View style={{
-        width: "100%",
-        maxWidth: 300,
-        aspectRatio: 9 / 16,
-        borderRadius: 28,
-        overflow: "hidden",
-        backgroundColor: "#111",
-        borderWidth: 2,
-        borderColor: isPlaying ? "rgba(255,100,40,0.7)" : colors.border,
-        position: "relative",
-      } as any}>
-
-        {/* Video / placeholder background */}
-        {previewVideoUrl
-          ? React.createElement("video", {
-              ref: videoRef,
-              src: previewVideoUrl,
-              loop: true,
-              muted: true,
-              playsInline: true,
-              style: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" },
-            })
-          : (
-            <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#0d0d1a", alignItems: "center", justifyContent: "center" } as any}>
-              <Ionicons name="musical-note-outline" size={40} color="rgba(255,255,255,0.08)" />
-            </View>
-          )
-        }
-
-        {/* Bottom gradient */}
-        {React.createElement("div", {
-          style: {
-            position: "absolute", bottom: 0, left: 0, right: 0, height: "60%",
-            background: "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.92) 100%)",
-            pointerEvents: "none",
-          },
-        })}
-
-        {/* Center play button (when paused) */}
-        {!isPlaying && (
-          <TouchableOpacity
-            onPress={togglePlay}
-            disabled={!selected && !audioLoaded}
-            activeOpacity={0.8}
-            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 120, alignItems: "center", justifyContent: "center" } as any}
-          >
-            {(selected || suggestions.length > 0) && (
-              <View style={{
-                width: 50, height: 50, borderRadius: 25,
-                backgroundColor: "rgba(255,255,255,0.15)",
-                borderWidth: 2, borderColor: "rgba(255,255,255,0.65)",
-                alignItems: "center", justifyContent: "center",
-              }}>
-                <Ionicons name="play" size={22} color="#fff" />
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
-
-        {/* PREVIEW badge */}
-        {isPlaying && (
-          <View style={{
-            position: "absolute", top: 22, left: 10,
-            flexDirection: "row", alignItems: "center", gap: 4,
-            backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20,
-            paddingHorizontal: 8, paddingVertical: 3,
-          } as any}>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#ff4444" }} />
-            <Text style={{ fontFamily: fonts.semiBold, fontSize: 10, color: "#fff" }}>PREVIEW</Text>
+  // ─── Web UI : un seul « écran » preview, waveform en overlay bas ─────────────
+  const videoLayer = (
+    <>
+      {editorPreview ? (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+          } as any}
+        >
+          {editorPreview}
+        </View>
+      ) : previewVideoUrl ? (
+        React.createElement("video", {
+          ref: videoRef,
+          src: previewVideoUrl,
+          loop: true,
+          muted: true,
+          playsInline: true,
+          style: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" },
+        })
+      ) : (
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#0d0d1a", alignItems: "center", justifyContent: "center" } as any}>
+            <Ionicons name="musical-note-outline" size={40} color="rgba(255,255,255,0.08)" />
           </View>
         )}
-
-        {/* ── Bottom overlay: chips + controls + waveform ── */}
-        <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 10, paddingBottom: 10, gap: 8 } as any}>
-
-          {/* Controls row */}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {/* Duration pill */}
+      {React.createElement("div", {
+        style: {
+          position: "absolute", bottom: 0, left: 0, right: 0, height: "60%",
+          background: "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.92) 100%)",
+          pointerEvents: "none",
+        },
+      })}
+      {!isPlaying ? (
+        <TouchableOpacity
+          onPress={togglePlay}
+          disabled={!selected && !audioLoaded}
+          activeOpacity={0.8}
+          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: playTapBottomInset, alignItems: "center", justifyContent: "center" } as any}
+        >
+          {(selected || suggestions.length > 0) && (
             <View style={{
-              width: 36, height: 36, borderRadius: 18,
+              width: 50, height: 50, borderRadius: 25,
               backgroundColor: "rgba(255,255,255,0.15)",
+              borderWidth: 2, borderColor: "rgba(255,255,255,0.65)",
               alignItems: "center", justifyContent: "center",
             }}>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: "#fff" }}>
-                {selected ? `${Math.round(selected.end - selected.start)}s` : `${MIN_SEGMENT_SEC}s+`}
-              </Text>
+              <Ionicons name="play" size={22} color="#fff" />
             </View>
+          )}
+        </TouchableOpacity>
+      ) : (
+        <Pressable
+          onPress={togglePlay}
+          accessibilityRole="button"
+          accessibilityLabel="Arrêter la préécoute"
+          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: playTapBottomInset } as any}
+        />
+      )}
+      {isPlaying && (
+        <View style={{
+          position: "absolute", top: 22, right: 10, left: "auto" as any,
+          flexDirection: "row", alignItems: "center", gap: 4,
+          backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20,
+          paddingHorizontal: 8, paddingVertical: 3,
+        } as any}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#ff4444" }} />
+          <Text style={{ fontFamily: fonts.semiBold, fontSize: 10, color: "#fff" }}>PREVIEW</Text>
+        </View>
+      )}
+    </>
+  );
 
-            {/* Time display */}
-            <Text style={{ flex: 1, fontFamily: fonts.medium, fontSize: 11, color: "rgba(255,255,255,0.6)", textAlign: "center" }}>
-              {selected ? `${fmt(selected.start)} → ${fmt(selected.end)}` : duration > 0 ? fmt(displayTime) : "—"}
-            </Text>
+  const controlsAndWaveform = (
+    <View style={{ width: "100%" } as any}>
+      <View style={{ borderRadius: 8, overflow: "hidden", backgroundColor: "rgba(0,0,0,0.25)", width: "100%" } as any}>
+        {suggestionsLoading && audioLoaded && (
+          <View style={{ position: "absolute", top: 4, left: 0, right: 0, alignItems: "center", zIndex: 1 } as any}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 }}>
+              <ActivityIndicator color="rgba(255,200,100,0.9)" size="small" />
+              <Text style={{ fontFamily: fonts.regular, fontSize: 9, color: "rgba(255,200,100,0.9)" }}>Analyse…</Text>
+            </View>
+          </View>
+        )}
+        {decoding ? (
+          <View style={{ height: waveCanvasHeight, alignItems: "center", justifyContent: "center" }}>
+            <ActivityIndicator color="rgba(255,255,255,0.5)" size="small" />
+          </View>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            style={{
+              display: "block",
+              width: "100%",
+              height: waveCanvasHeight,
+              cursor: isDragging ? "grabbing" : "grab",
+              touchAction: "none",
+              userSelect: "none",
+            } as any}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          />
+        )}
+      </View>
+    </View>
+  );
 
-            {/* Play / stop button */}
-            <TouchableOpacity
-              onPress={togglePlay}
-              disabled={!audioLoaded && !selected}
-              activeOpacity={0.8}
+  const phoneShellStyle = {
+    overflow: "hidden" as const,
+    backgroundColor: "#111",
+    borderWidth: 2,
+    borderColor: isPlaying ? "rgba(255,100,40,0.7)" : colors.border,
+    position: "relative" as const,
+  };
+
+  const shellFrameStyle = embedInEditorColumn
+    ? embedPhonePx
+      ? { width: embedPhonePx.w, height: embedPhonePx.h }
+      : { width: 304, height: Math.floor((304 * 16) / 9) }
+    : {
+        width: "100%",
+        ...(previewMaxWidth != null ? { maxWidth: previewMaxWidth } : {}),
+        aspectRatio: 9 / 16,
+      };
+
+  return (
+    <View
+      onLayout={embedInEditorColumn ? onEmbedColumnLayout : undefined}
+      style={
+        embedInEditorColumn
+          ? ({
+              flex: 1,
+              minHeight: 0,
+              width: "100%",
+              alignSelf: "stretch",
+              justifyContent: "center",
+              alignItems: "center",
+              overflow: "hidden",
+            } as any)
+          : { width: "100%", alignItems: "center" }
+      }
+    >
+      <View
+        style={{
+          ...shellFrameStyle,
+          borderRadius: isWideWeb ? radius.xl : 28,
+          alignSelf: "center",
+          ...phoneShellStyle,
+        } as any}
+      >
+        {videoLayer}
+
+        {sectionTitle ? (
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              paddingHorizontal: 12,
+              paddingTop: 12,
+              paddingBottom: 20,
+              zIndex: 2,
+            } as any}
+            pointerEvents="none"
+          >
+            {React.createElement("div", {
+              style: {
+                position: "absolute",
+                inset: 0,
+                background: "linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 55%, transparent 100%)",
+                pointerEvents: "none",
+              },
+            })}
+            <Text
               style={{
-                width: 36, height: 36, borderRadius: 18,
-                backgroundColor: isPlaying ? "#fff" : "rgba(255,255,255,0.18)",
-                alignItems: "center", justifyContent: "center",
+                fontFamily: fonts.semiBold,
+                fontSize: isWideWeb ? fontSize.sm : 11,
+                color: "rgba(255,255,255,0.92)",
               }}
             >
-              <Ionicons name={isPlaying ? "stop" : "play"} size={14} color={isPlaying ? "#000" : "#fff"} />
-            </TouchableOpacity>
+              {sectionTitle}
+            </Text>
           </View>
+        ) : null}
 
-          {/* Waveform canvas */}
-          <View style={{ borderRadius: 8, overflow: "hidden", backgroundColor: "rgba(0,0,0,0.25)" }}>
-            {suggestionsLoading && audioLoaded && (
-              <View style={{ position: "absolute", top: 4, left: 0, right: 0, alignItems: "center", zIndex: 1 } as any}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 }}>
-                  <ActivityIndicator color="rgba(255,200,100,0.9)" size="small" />
-                  <Text style={{ fontFamily: fonts.regular, fontSize: 9, color: "rgba(255,200,100,0.9)" }}>Analyse…</Text>
-                </View>
-              </View>
-            )}
-            {decoding ? (
-              <View style={{ height: 64, alignItems: "center", justifyContent: "center" }}>
-                <ActivityIndicator color="rgba(255,255,255,0.5)" size="small" />
-              </View>
-            ) : (
-              <canvas
-                ref={canvasRef}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  height: 64,
-                  cursor: isDragging ? "grabbing" : "grab",
-                  touchAction: "none",
-                  userSelect: "none",
-                } as any}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-              />
-            )}
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            paddingHorizontal: 12,
+            paddingTop: 8,
+            paddingBottom: 10,
+            zIndex: 3,
+          } as any}
+        >
+          {React.createElement("div", {
+            style: {
+              position: "absolute",
+              inset: 0,
+              background: "linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 50%, transparent 100%)",
+              pointerEvents: "none",
+            },
+          })}
+          <View style={{ position: "relative" as const, zIndex: 1, width: "100%" } as any}>
+            {controlsAndWaveform}
           </View>
         </View>
       </View>
-
     </View>
   );
 }

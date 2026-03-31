@@ -21,10 +21,32 @@ const VALID_ICONS = [
   'water-outline', 'leaf-outline', 'snow-outline', 'pulse-outline',
 ];
 
+/** Nombre d’ambiances visuelles proposées par suggestMood. */
+const MOOD_SUGGESTION_COUNT = 6;
+
 export interface DetectMoodAudioContext {
   durationSec?: number;
   audioEnergyEnvelope?: number[];
 }
+
+/** Empreinte stable par morceau — variation des defaults et du prompt sans RNG. */
+function moodRequestFingerprint(trackTitle: string, artistName: string): number {
+  const s = `${trackTitle.trim()}\n${artistName.trim()}`.toLowerCase();
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+const VARIATION_LENSES = [
+  'Slight lean: deep shadows, film grain, solitary framing, intimacy.',
+  'Slight lean: golden-hour warmth, dust in light beams, analog softness.',
+  'Slight lean: cool desaturated palette, clean geometry, negative space.',
+  'Slight lean: organic textures — fabric, wood grain, resting hands, plants.',
+  'Slight lean: wide horizons, still air, open fields or coast.',
+  'Slight lean: quiet motion — curtains, steam, distant train, soft traffic blur.',
+] as const;
 
 function summarizeEnvelopeForMood(envelope: number[], durationSec: number): string {
   const n = envelope.length;
@@ -35,7 +57,7 @@ function summarizeEnvelopeForMood(envelope: number[], durationSec: number): stri
   const peakPct = Math.round((maxIdx / Math.max(1, n - 1)) * 100);
   const dynamicRange = max - mean;
   let vibe =
-    'moderate dynamics — balanced lo-fi energy suitable for mixed interior and outdoor B-roll.';
+    'moderate dynamics — balanced energy; mixed interior and outdoor B-roll both work.';
   if (mean < 0.22 && max < 0.38) {
     vibe =
       'very calm waveform — favor sparse, still, ambient visuals (minimal motion, soft interiors, fog, long static shots).';
@@ -43,7 +65,7 @@ function summarizeEnvelopeForMood(envelope: number[], durationSec: number): stri
     vibe = 'soft steady energy — cozy interiors, gentle rain, warm lamps, slow camera.';
   } else if (max > 0.62 && dynamicRange > 0.28) {
     vibe =
-      'clear energy peaks — you can suggest slightly more rhythmic urban glow or subtle motion, still cinematic never fitness.';
+      'clear energy peaks — slightly more rhythmic urban glow or subtle motion; stay cinematic, never fitness or party stock.';
   }
   return `Client RMS envelope (${n} bins, ~${Math.round(durationSec)}s track): avg≈${mean.toFixed(2)}, peak≈${max.toFixed(2)} around ~${peakPct}% of duration. ${vibe}`;
 }
@@ -57,9 +79,12 @@ export async function detectMood(
   const durationSec =
     audio?.durationSec && audio.durationSec > 0 ? audio.durationSec : undefined;
   const audioBlock =
-    env && env.length >= 16 && durationSec
+    env && env.length >= 8 && durationSec
       ? `\n\nAudio analysis (from artist upload, not streaming):\n${summarizeEnvelopeForMood(env, durationSec)}`
       : '';
+
+  const fp = moodRequestFingerprint(trackTitle, artistName);
+  const lens = VARIATION_LENSES[fp % VARIATION_LENSES.length];
 
   try {
     const response = await openai.chat.completions.create({
@@ -67,25 +92,24 @@ export async function detectMood(
       messages: [
         {
           role: 'system',
-          content: `You are a creative director for indie lo-fi music videos (study beats, chillhop, tape aesthetic, ambient bedroom production).
-Generate 4 distinct visual mood options for vertical music clips — cinematic, soft, intentional — never corporate or fitness stock.
+          content: `You are a creative director for music promo clips (indie, electronic, soul, rock, hip-hop, ambient — not only lo-fi).
+Generate exactly ${MOOD_SUGGESTION_COUNT} DISTINCT visual mood options for vertical (9:16) stock footage — cinematic, tasteful, never corporate stock smiles or gym/fitness.
 
-DIVERSITY RULE (critical): The 4 moods must search DIFFERENTLY on stock video sites. Assign each mood a different primary setting:
-(1) intimate interior — desk, vinyl, warm lamp, bookshelf, bedroom soft light
-(2) rain / glass / window — bokeh city, droplets, cozy inside-looking-out (not all 4 moods may use rain)
-(3) nature / fog / forest / field / mist — wide calm outdoor
-(4) soft urban night — empty streets, subtle neon reflection, calm alley, slow traffic blur — never nightclub crowd
+TRACK-SPECIFICITY (critical): Infer genre, era, and emotional tone from the track TITLE and ARTIST name (and audio summary if present). Labels (2–4 words; English, or short evocative French if the track metadata is French) and keyword phrases must feel tailored to THIS track — not generic names that could apply to any chill playlist.
 
-Each mood needs exactly 3 Pexels-oriented keyword phrases in English (editorial, cinematic). Avoid repeating the same root theme across all four (e.g. not four "rain window" variants). Keywords should be specific enough to return varied footage.
+STOCK SEARCH DIVERSITY (critical): All ${MOOD_SUGGESTION_COUNT} moods must return DIFFERENT clips on stock sites. Spread across contrasting worlds (e.g. intimate interior, rain/glass, open nature, quiet urban night, industrial/minimal space, water/coast or desert/road — mix as fits the track). If the song evokes a clear theme, adapt while keeping ${MOOD_SUGGESTION_COUNT} non-overlapping search vectors.
+
+Each mood: exactly 3 English keyword phrases for stock search (editorial, cinematic, specific — not "happy people" or "dancing crowd").
 
 Icons (Ionicons only): ${VALID_ICONS.join(', ')}
-Return ONLY valid JSON.`,
+Return ONLY valid JSON with top-level key "moods" (array of length ${MOOD_SUGGESTION_COUNT}).`,
         },
         {
           role: 'user',
           content: `Track: "${trackTitle}" by ${artistName}${audioBlock}
 
-Generate 4 lo-fi indie visual moods. Labels evocative (short). Keywords in English, editorial / cinematic, not generic "happy people".
+Creative lens (subtle, across all moods): ${lens}
+Request fingerprint ${fp}: mood keys and labels must plausibly differ from an unrelated track.
 
 Return JSON:
 {
@@ -99,42 +123,87 @@ Return JSON:
   ]
 }
 
-Generate exactly 4 moods.`,
+Generate exactly ${MOOD_SUGGESTION_COUNT} moods.`,
         },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.78,
+      temperature: 0.92,
     });
 
     const content = response.choices[0]?.message?.content;
-    if (!content) return getDefaultMoods();
+    if (!content) return defaultMoodsForTrack(trackTitle, artistName);
 
-    const parsed = JSON.parse(content) as { moods: MoodOption[] };
+    let parsed: { moods?: MoodOption[] };
+    try {
+      parsed = JSON.parse(content) as { moods?: MoodOption[] };
+    } catch {
+      console.warn('[detectMood] invalid JSON from model, using per-track defaults');
+      return defaultMoodsForTrack(trackTitle, artistName);
+    }
+
     const moods = parsed.moods ?? [];
-    if (moods.length === 0) return getDefaultMoods();
+    if (moods.length === 0) return defaultMoodsForTrack(trackTitle, artistName);
 
-    return {
-      moods: moods.slice(0, 4).map((m) => ({
-        key: m.key ?? 'mood',
-        label: m.label ?? 'Mood',
-        videoKeywords: (m.videoKeywords ?? []).slice(0, 3),
-        icon: VALID_ICONS.includes(m.icon) ? m.icon : 'musical-note-outline',
-      })),
-    };
-  } catch {
-    return getDefaultMoods();
+    const normalized = moods.slice(0, MOOD_SUGGESTION_COUNT).map((m) => ({
+      key: m.key ?? 'mood',
+      label: m.label ?? 'Mood',
+      videoKeywords: (m.videoKeywords ?? []).slice(0, 3),
+      icon: VALID_ICONS.includes(m.icon) ? m.icon : 'musical-note-outline',
+    }));
+
+    const seen = new Set(normalized.map((m) => m.key));
+    if (normalized.length < MOOD_SUGGESTION_COUNT) {
+      for (const fallback of defaultMoodsForTrack(trackTitle, artistName).moods) {
+        if (normalized.length >= MOOD_SUGGESTION_COUNT) break;
+        if (seen.has(fallback.key)) continue;
+        seen.add(fallback.key);
+        normalized.push({ ...fallback });
+      }
+    }
+
+    return { moods: normalized.slice(0, MOOD_SUGGESTION_COUNT) };
+  } catch (e) {
+    console.warn('[detectMood] OpenAI error, using per-track defaults', e);
+    return defaultMoodsForTrack(trackTitle, artistName);
   }
 }
 
-function getDefaultMoods(): MoodSuggestion {
-  return {
+const DEFAULT_MOOD_SETS: MoodSuggestion[] = [
+  {
     moods: [
       { key: 'study_rain', label: 'Study & Rain', videoKeywords: ['rain window bokeh cinematic', 'cozy desk lamp night', 'soft focus city rain'], icon: 'water-outline' },
       { key: 'tape_dusk', label: 'Tape & Dusk', videoKeywords: ['golden hour urban calm', 'analog film grain aesthetic', 'sunset rooftop slow'], icon: 'partly-sunny-outline' },
       { key: 'night_neon', label: 'Soft Neon Night', videoKeywords: ['neon reflection wet street moody', 'tokyo night soft blur', 'empty alley cinematic'], icon: 'moon-outline' },
       { key: 'forest_mist', label: 'Forest Mist', videoKeywords: ['foggy forest cinematic', 'misty trees morning', 'nature slow motion calm'], icon: 'leaf-outline' },
+      { key: 'desert_road', label: 'Desert Road Haze', videoKeywords: ['empty highway heat shimmer cinematic', 'arizona landscape long road', 'dust devil slow wide shot'], icon: 'car-outline' },
+      { key: 'attic_dust', label: 'Attic Sunbeams', videoKeywords: ['dust particles sunbeam attic window', 'old wooden beams soft light', 'stored boxes vintage room still'], icon: 'sunny-outline' },
     ],
-  };
+  },
+  {
+    moods: [
+      { key: 'coastal_dawn', label: 'Coastal Dawn', videoKeywords: ['empty beach morning mist cinematic', 'soft waves slow motion shore', 'pier silhouette sunrise calm'], icon: 'partly-sunny-outline' },
+      { key: 'loft_haze', label: 'Loft Haze', videoKeywords: ['industrial loft window light dust', 'concrete interior plant shadows', 'minimal studio morning haze'], icon: 'business-outline' },
+      { key: 'midnight_diner', label: 'Midnight Diner', videoKeywords: ['diner neon reflection wet pavement', 'empty street steam vent night', 'vintage booth lamp moody'], icon: 'moon-outline' },
+      { key: 'highland_fog', label: 'Highland Fog', videoKeywords: ['rolling hills fog cinematic wide', 'sheep trail misty pasture', 'stone wall moss overcast'], icon: 'leaf-outline' },
+      { key: 'harbor_dusk', label: 'Harbor Still', videoKeywords: ['marina boats still water dusk', 'crane silhouette blue hour port', 'rope pier wooden planks moody'], icon: 'water-outline' },
+      { key: 'greenhouse_glass', label: 'Greenhouse Glass', videoKeywords: ['glass greenhouse condensation plants', 'botanical interior soft overcast', 'fern shadows humid air cinematic'], icon: 'leaf-outline' },
+    ],
+  },
+  {
+    moods: [
+      { key: 'vinyl_corner', label: 'Vinyl Corner', videoKeywords: ['record player close up warm lamp', 'bookshelf bokeh evening interior', 'tea steam window rainy blur'], icon: 'musical-note-outline' },
+      { key: 'subway_drift', label: 'Subway Drift', videoKeywords: ['empty subway tunnel motion blur', 'fluorescent corridor lone figure', 'escalator city underground moody'], icon: 'pulse-outline' },
+      { key: 'meadow_wind', label: 'Meadow Wind', videoKeywords: ['tall grass wind golden hour field', 'wildflowers slow pan horizon', 'country road sunset dust'], icon: 'sunny-outline' },
+      { key: 'rooftop_amber', label: 'Rooftop Amber', videoKeywords: ['rooftop city skyline dusk haze', 'antenna silhouette orange sky', 'helicopter distant lights soft'], icon: 'star-outline' },
+      { key: 'bridge_fog', label: 'Bridge in Fog', videoKeywords: ['suspension bridge vanishing fog', 'river below mist morning wide', 'lone pedestrian cable bridge moody'], icon: 'thunderstorm-outline' },
+      { key: 'snow_field', label: 'Quiet Snowfield', videoKeywords: ['snow field overcast footsteps alone', 'bare trees winter horizon cinematic', 'frozen lake gray sky still'], icon: 'snow-outline' },
+    ],
+  },
+];
+
+function defaultMoodsForTrack(trackTitle: string, artistName: string): MoodSuggestion {
+  const i = moodRequestFingerprint(trackTitle, artistName) % DEFAULT_MOOD_SETS.length;
+  return DEFAULT_MOOD_SETS[i]!;
 }
 
 export interface HookSuggestion {

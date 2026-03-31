@@ -32,7 +32,7 @@ import {
   SUGGEST_HOOKS_QUERY,
   SUGGEST_MOOD_QUERY,
   SEARCH_VIDEOS_FOR_MOOD_QUERY,
-  SEARCH_PEXELS_VIDEOS_QUERY,
+  SEARCH_STOCK_VIDEOS_QUERY,
   CAMPAIGN_QUERY,
   STREAMING_TRACK_FROM_URL_QUERY,
 } from '../../../src/graphql/queries';
@@ -69,9 +69,9 @@ type WizardMood = {
   icon: string;
 };
 
-/** Clips Pexels par ambiance ou recherche (grille 3×3). */
+/** Clips stock par ambiance ou recherche (grille 3×3). */
 const STEP2_STOCK_VIDEO_COUNT = 9;
-/** Nombre max de pages Pexels affichées (tag ou recherche). */
+/** Nombre max de pages de résultats (tag ou recherche). */
 const STEP2_STOCK_MAX_PAGES = 5;
 
 function normalizeHookEnergy(h: {
@@ -548,8 +548,8 @@ export default function NewCampaignScreen() {
   const [moodOptions, setMoodOptions] = useState<WizardMood[]>([]);
   const [selectedMoodKey, setSelectedMoodKey] = useState<string | null>(null);
   const [stockVideosLoading, setStockVideosLoading] = useState(false);
-  const [step2PexelsSearchText, setStep2PexelsSearchText] = useState('');
-  const [step2PexelsSearchQuery, setStep2PexelsSearchQuery] = useState('');
+  const [step2StockSearchText, setStep2StockSearchText] = useState('');
+  const [step2StockSearchQuery, setStep2StockSearchQuery] = useState('');
   const audioEnergySnapshotRef = useRef<{ durationSec: number; envelope: number[] } | null>(null);
   const step2PreviewVideoRef = useRef<HTMLVideoElement | null>(null);
   const [campaignId, setCampaignId] = useState<string | null>(null);
@@ -733,13 +733,13 @@ export default function NewCampaignScreen() {
     cid: string,
     moodKey: string,
     keywords: string[],
-    pexelsFreeText?: string | null,
+    stockSearchQuery?: string | null,
     pageNum: number = 1
   ): Promise<number> {
     setStockVideosLoading(true);
     try {
       const apiPage = Math.min(STEP2_STOCK_MAX_PAGES, Math.max(1, pageNum));
-      const freeQ = pexelsFreeText?.trim() ?? '';
+      const freeQ = stockSearchQuery?.trim() ?? '';
       let videosRes;
       let pageData: {
         videos?: Array<{
@@ -763,7 +763,7 @@ export default function NewCampaignScreen() {
 
       if (freeQ) {
         videosRes = await apolloClient.query({
-          query: SEARCH_PEXELS_VIDEOS_QUERY,
+          query: SEARCH_STOCK_VIDEOS_QUERY,
           variables: { query: freeQ, page: apiPage },
           fetchPolicy: 'network-only',
         });
@@ -1067,20 +1067,20 @@ export default function NewCampaignScreen() {
     setPickedSpotifyCoverUrl(tr.albumImageUrl ?? null);
   }
 
-  async function submitStep2PexelsSearch() {
+  async function submitStep2StockSearch() {
     if (!campaignId) return;
-    const q = step2PexelsSearchText.trim();
-    setStep2PexelsSearchQuery(q);
+    const q = step2StockSearchText.trim();
+    setStep2StockSearchQuery(q);
     setStep2PreviewVideoId(null);
     setStep2StockPage(1);
     const m = moodOptions.find((x) => x.key === selectedMoodKey);
     await fetchStockVideosForStep2(campaignId, m?.key ?? 'dreamy', m?.videoKeywords ?? [], q || undefined, 1);
   }
 
-  async function clearStep2PexelsSearch() {
+  async function clearStep2StockSearch() {
     if (!campaignId) return;
-    setStep2PexelsSearchText('');
-    setStep2PexelsSearchQuery('');
+    setStep2StockSearchText('');
+    setStep2StockSearchQuery('');
     setStep2PreviewVideoId(null);
     setStep2StockPage(1);
     const m = moodOptions.find((x) => x.key === selectedMoodKey);
@@ -1094,8 +1094,8 @@ export default function NewCampaignScreen() {
     const m = moodOptions.find((x) => x.key === moodKey);
     if (!m) return;
     setStep2PreviewVideoId(null);
-    setStep2PexelsSearchText('');
-    setStep2PexelsSearchQuery('');
+    setStep2StockSearchText('');
+    setStep2StockSearchQuery('');
     setStep2StockPage(1);
     setSelectedMoodKey(moodKey);
     await fetchStockVideosForStep2(campaignId, m.key, m.videoKeywords, undefined, 1);
@@ -1111,7 +1111,7 @@ export default function NewCampaignScreen() {
     if (nextPage > maxP) return;
     setStep2PreviewVideoId(null);
     const m = moodOptions.find((x) => x.key === selectedMoodKey);
-    const committed = step2PexelsSearchQuery.trim();
+    const committed = step2StockSearchQuery.trim();
     await fetchStockVideosForStep2(
       campaignId,
       m?.key ?? 'dreamy',
@@ -1548,30 +1548,7 @@ export default function NewCampaignScreen() {
   );
 
   const videoEditorStepEl = (
-    <View style={{ width: '100%' as any, gap: spacing.lg, alignItems: 'stretch' }}>
-      {Platform.OS === 'web' && pendingTrackFile ? (
-        <View style={{ paddingHorizontal: isMobile ? spacing.md : spacing.xl, alignItems: 'center' }}>
-          <Text
-            style={{
-              fontFamily: fonts.semiBold,
-              fontSize: fontSize.sm,
-              color: colors.textMuted,
-              marginBottom: spacing.sm,
-              textAlign: 'center',
-            }}
-          >
-            {t('campaigns.new.waveformSectionTitle')}
-          </Text>
-          <WaveformHookPicker
-            audioFile={pendingTrackFile}
-            suggestions={hookSuggestions}
-            selected={selectedHook}
-            onSelect={setSelectedHook}
-            loading={hooksLoading}
-            previewVideoUrl={customVideoLocalUrl ?? selectedPreviewUrls[0] ?? undefined}
-          />
-        </View>
-      ) : null}
+    <View style={{ flex: 1, minHeight: 0, width: '100%' as any }}>
       <VideoEditorStep
         fullBleed
         videoUrl={customVideoLocalUrl ?? selectedPreviewUrls[0] ?? ''}
@@ -1579,6 +1556,19 @@ export default function NewCampaignScreen() {
         onChange={setEditorSettings}
         coverImageUrl={pickedSpotifyCoverUrl}
         defaultEndCardTitle={trackTitle}
+        previewSlot={
+          Platform.OS === 'web' && pendingTrackFile ? (
+            <WaveformHookPicker
+              embedInEditorColumn
+              audioFile={pendingTrackFile}
+              suggestions={hookSuggestions}
+              selected={selectedHook}
+              onSelect={setSelectedHook}
+              loading={hooksLoading}
+              previewVideoUrl={customVideoLocalUrl ?? selectedPreviewUrls[0] ?? undefined}
+            />
+          ) : undefined
+        }
       />
     </View>
   );
@@ -1839,7 +1829,7 @@ export default function NewCampaignScreen() {
                 </View>
               ) : null}
               <View style={{ gap: spacing.sm }}>
-                <Text style={[styles.sectionLabel, { marginTop: 0 }]}>{t('campaigns.new.step2PexelsSearchLabel')}</Text>
+                <Text style={[styles.sectionLabel, { marginTop: 0 }]}>{t('campaigns.new.step2StockSearchLabel')}</Text>
                 <View
                   style={{
                     flexDirection: 'row',
@@ -1849,10 +1839,10 @@ export default function NewCampaignScreen() {
                   }}
                 >
                   <TextInput
-                    value={step2PexelsSearchText}
-                    onChangeText={setStep2PexelsSearchText}
-                    onSubmitEditing={() => void submitStep2PexelsSearch()}
-                    placeholder={t('campaigns.new.step2PexelsSearchPlaceholder')}
+                    value={step2StockSearchText}
+                    onChangeText={setStep2StockSearchText}
+                    onSubmitEditing={() => void submitStep2StockSearch()}
+                    placeholder={t('campaigns.new.step2StockSearchPlaceholder')}
                     placeholderTextColor={colors.textMuted}
                     returnKeyType="search"
                     editable={!stockVideosLoading}
@@ -1871,18 +1861,18 @@ export default function NewCampaignScreen() {
                     }}
                   />
                   <Button
-                    label={t('campaigns.new.step2PexelsSearchSubmit')}
+                    label={t('campaigns.new.step2StockSearchSubmit')}
                     variant="secondary"
                     size="sm"
-                    onPress={() => void submitStep2PexelsSearch()}
+                    onPress={() => void submitStep2StockSearch()}
                     disabled={stockVideosLoading}
                   />
-                  {step2PexelsSearchQuery.trim() ? (
+                  {step2StockSearchQuery.trim() ? (
                     <Button
-                      label={t('campaigns.new.step2PexelsSearchClear')}
+                      label={t('campaigns.new.step2StockSearchClear')}
                       variant="secondary"
                       size="sm"
-                      onPress={() => void clearStep2PexelsSearch()}
+                      onPress={() => void clearStep2StockSearch()}
                       disabled={stockVideosLoading}
                     />
                   ) : null}
@@ -1967,6 +1957,7 @@ export default function NewCampaignScreen() {
                                 <TouchableOpacity
                                   style={styles.step2PlayFab}
                                   onPress={() => {
+                                    setSelectedStockVideoId(v.id);
                                     if (Platform.OS === 'web') {
                                       setStep2PreviewVideoId((p) => (p === v.id ? null : v.id));
                                     } else {
@@ -2048,12 +2039,6 @@ export default function NewCampaignScreen() {
             ) : null}
 
             <View style={[styles.actions, { marginTop: spacing.md }]}>
-              <Button
-                label={t('campaigns.new.step2Back')}
-                variant="secondary"
-                onPress={() => setStep(1)}
-                disabled={stockVideosLoading && stockVideoOptions.length === 0}
-              />
               <Button
                 label={t('campaigns.new.continueBtn')}
                 onPress={() => void handleStep2Continue()}

@@ -209,8 +209,8 @@ export const SEARCH_VIDEOS_FOR_MOOD_QUERY = gql`
   }
 `;
 
-export const SEARCH_PEXELS_VIDEOS_QUERY = gql`
-  query SearchPexelsVideos($query: String!, $page: Int) {
+export const SEARCH_STOCK_VIDEOS_QUERY = gql`
+  query SearchStockVideos($query: String!, $page: Int) {
     searchPexelsVideos(query: $query, page: $page) {
       videos {
         id

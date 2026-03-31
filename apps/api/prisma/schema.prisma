@@ -72,7 +72,7 @@ model Campaign {
   hookStart      Float?
   hookEnd        Float?
   videoS3Key     String?        // source video: custom upload S3 key
-  videoUrl       String?        // source video: Pexels URL or custom upload URL
+  videoUrl       String?        // source video: stock URL or custom upload URL
   editorSettings Json?          // filter, text, fade settings
   status         CampaignStatus @default(DRAFT)
   metaCampaignId String?

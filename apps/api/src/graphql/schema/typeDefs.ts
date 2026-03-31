@@ -214,14 +214,14 @@ export const typeDefs = `#graphql
       audioDurationSec: Float
       audioEnergyEnvelope: [Float!]
     ): [HookSuggestion!]!
-    """Ambiances visuelles ; optionnellement biaisées par la courbe RMS client (Web Audio)."""
+    """Ambiances visuelles (plusieurs propositions) ; optionnellement biaisées par la courbe RMS client (Web Audio)."""
     suggestMood(
       campaignId: ID!
       audioDurationSec: Float
       audioEnergyEnvelope: [Float!]
     ): MoodSuggestion!
     searchVideosForMood(mood: String!, page: Int, keywords: [String!]): PexelsVideosPage!
-    """Recherche libre de clips portrait sur Pexels (texte saisi par l'utilisateur)."""
+    """Recherche libre de clips portrait par mots-clés (texte saisi par l'utilisateur)."""
     searchPexelsVideos(query: String!, page: Int): PexelsVideosPage!
     metaAdAccounts: [MetaAdAccount!]!
     metaPages: [MetaPage!]!
