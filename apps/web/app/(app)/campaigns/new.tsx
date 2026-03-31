@@ -37,7 +37,11 @@ import {
   STREAMING_TRACK_FROM_URL_QUERY,
 } from '../../../src/graphql/queries';
 import { Button, Card } from '../../../src/components/ui';
-import { VideoEditorStep, DEFAULT_EDITOR_SETTINGS } from '../../../src/components/ui/VideoEditorStep';
+import {
+  VideoEditorStep,
+  DEFAULT_EDITOR_SETTINGS,
+  sanitizeEditorSettings,
+} from '../../../src/components/ui/VideoEditorStep';
 import type { VideoEditorSettings } from '../../../src/components/ui/VideoEditorStep';
 import { WaveformHookPicker } from '../../../src/components/ui/WaveformHookPicker';
 import { useAuth } from '../../../src/hooks/useAuth';
@@ -592,7 +596,8 @@ export default function NewCampaignScreen() {
           setCustomVideoUploaded(true);
         }
       }
-      if (c.editorSettings) setEditorSettings({ ...DEFAULT_EDITOR_SETTINGS, ...c.editorSettings });
+      if (c.editorSettings)
+        setEditorSettings(sanitizeEditorSettings(c.editorSettings));
       if (c.hookStart != null && c.hookEnd != null) {
         setSelectedHook(
           normalizeHookEnergy({
@@ -626,7 +631,8 @@ export default function NewCampaignScreen() {
         });
         const c = data?.campaign;
         if (!c) return;
-        if (c.editorSettings) setEditorSettings({ ...DEFAULT_EDITOR_SETTINGS, ...c.editorSettings });
+        if (c.editorSettings)
+        setEditorSettings(sanitizeEditorSettings(c.editorSettings));
         if (c.hookStart != null && c.hookEnd != null) {
           setSelectedHook(
             normalizeHookEnergy({

@@ -58,6 +58,41 @@ const PRESET_FFMPEG: Record<string, string> = {
   soft_vhs: 'eq=saturation=0.62:contrast=0.88,colorchannelmixer=rr=1.05:gg=0.98:bb=1.02,hue=h=168',
 };
 
+/**
+ * Animations export — sous-ensemble volontairement court (~10), testé avec FFmpeg 8+.
+ * Uniquement zoompan, vignette, gblur, noise, eq (pas colorbalance/unsharp/curves/hue animé).
+ */
+function buildMotionFfmpegChain(motionPreset: string | undefined): string {
+  const m = (motionPreset || 'none').trim();
+  if (!m || m === 'none') return '';
+
+  // zoompan : virgules échappées pour la syntaxe filtergraph
+  const Z = {
+    kb: "zoompan=z='min(zoom+0.0024\\,1.32)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30",
+    zo: "zoompan=z='if(eq(on\\,0)\\,1.26\\,max(zoom-0.0022\\,1))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30",
+    dr: "zoompan=z='1.1':x='max(iw/2-(iw/zoom/2)-on*0.55\\,0)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30",
+    bt: "zoompan=z='1+0.05*sin(2*PI*on/14)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30",
+    pp: "zoompan=z='1+0.085*sin(2*PI*on/9)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30",
+    ir: "zoompan=z='if(lte(on\\,3)\\,1+on*0.05\\,min(zoom+0.0028\\,1.22))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30",
+  };
+
+  const chains: Record<string, string> = {
+    kenburns: Z.kb,
+    zoomout: Z.zo,
+    drift: Z.dr,
+    beat: Z.bt,
+    pop: Z.pp,
+    iris: Z.ir,
+    dream:
+      "zoompan=z='min(zoom+0.0009\\,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30,vignette=angle=0.52:eval=frame,gblur=sigma=0.75",
+    vhs: 'noise=alls=5:allf=t+u,eq=saturation=0.82:contrast=0.95:brightness=-0.03',
+    noir: 'eq=contrast=1.42:brightness=-0.07:saturation=0.62',
+    glitch: 'noise=alls=10:allf=t,eq=contrast=1.08',
+  };
+
+  return chains[m] || '';
+}
+
 export async function generateAdVariants(params: {
   campaignId: string;
   trackS3Key: string | null;
@@ -218,6 +253,7 @@ function buildFilterComplex(opts: {
     endCardDurationSec = 3,
     endCardTitle = '',
     endCardShowTitle = true,
+    motionPreset = 'none',
   } = editorSettings;
 
   const filters: string[] = [];
@@ -226,7 +262,7 @@ function buildFilterComplex(opts: {
     `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,loop=loop=-1:size=500,trim=duration=${hookDuration},setpts=PTS-STARTPTS[base]`
   );
 
-  const presetFilter = PRESET_FFMPEG[filterPreset] ?? PRESET_FFMPEG.lofi ?? '';
+  const presetFilter = PRESET_FFMPEG[filterPreset] ?? '';
   const eqBrightness = ((brightness - 100) / 100).toFixed(3);
   const eqContrast = (contrast / 100).toFixed(3);
   const eqSaturation = (saturation / 100).toFixed(3);
@@ -238,10 +274,17 @@ function buildFilterComplex(opts: {
   const colorChain = [presetFilter, eqFilter].filter(Boolean).join(',');
   filters.push(colorChain ? `[base]${colorChain}[colored]` : `[base]null[colored]`);
 
-  if (grain > 0) {
-    filters.push(`[colored]noise=alls=${Math.round(grain * 0.4)}:allf=t+u[grained]`);
+  const motionChain = buildMotionFfmpegChain(motionPreset);
+  if (motionChain) {
+    filters.push(`[colored]${motionChain}[motioned]`);
   } else {
-    filters.push(`[colored]null[grained]`);
+    filters.push(`[colored]null[motioned]`);
+  }
+
+  if (grain > 0) {
+    filters.push(`[motioned]noise=alls=${Math.round(grain * 0.4)}:allf=t+u[grained]`);
+  } else {
+    filters.push(`[motioned]null[grained]`);
   }
 
   filters.push(`[grained]null[faded]`);
@@ -259,10 +302,12 @@ function buildFilterComplex(opts: {
   const yPos =
     textPosition === 'top' ? '80' : textPosition === 'center' ? '(h-text_h)/2' : 'h-150';
 
-  const fontstyle = fontFamily === 'bold' ? 'Bold' : 'Normal';
+  /** FFmpeg 8+ : l’option drawtext `fontstyle` n’existe plus — on grossit un peu pour « bold ». */
+  const drawFontSize =
+    fontFamily === 'bold' ? Math.round(fontSize * 1.12) : fontSize;
 
   filters.push(
-    `[faded]drawtext=text='${displayText}':fontsize=${fontSize}:fontcolor=${ffFontColor}:x=(w-text_w)/2:y=${yPos}:box=1:boxcolor=${ffBgColor}:boxborderw=12:fontstyle=${fontstyle}[vtxt]`
+    `[faded]drawtext=text='${displayText}':fontsize=${drawFontSize}:fontcolor=${ffFontColor}:x=(w-text_w)/2:y=${yPos}:box=1:boxcolor=${ffBgColor}:boxborderw=12[vtxt]`
   );
 
   const ecDur = Math.min(Math.max(0.5, endCardDurationSec), hookDuration * 0.45);

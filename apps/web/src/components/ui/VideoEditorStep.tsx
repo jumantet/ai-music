@@ -20,271 +20,31 @@ import { spacing, fontSize, radius, fonts } from "../../theme";
 import type { ColorPalette } from "../../theme";
 
 const MOTION_STYLE_ID = "video-editor-motion-keyframes";
-const SVG_FILTERS_ROOT_ID = "video-editor-svg-filters-root";
 
 type EditorTab = "filters" | "motion" | "text";
 
-/** Filtres SVG (déformation organique) — appliqués sur le conteneur vidéo */
-const SVG_FILTER_BY_MOTION: Partial<Record<string, string>> = {
-  liquify: "url(#ve-filter-liquify)",
-  ripple: "url(#ve-filter-ripple)",
-  heat: "url(#ve-filter-heat)",
-};
-
-const SVG_FILTERS_HTML = `
-<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true" focusable="false">
-  <defs>
-    <filter id="ve-filter-liquify" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="3" result="n">
-        <animate attributeName="baseFrequency" values="0.009;0.024;0.014;0.011;0.019;0.011" dur="9s" repeatCount="indefinite"/>
-      </feTurbulence>
-      <feDisplacementMap in="SourceGraphic" in2="n" scale="14" xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-    <filter id="ve-filter-ripple" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
-      <feTurbulence type="turbulence" baseFrequency="0.028 0.09" numOctaves="2" seed="2" result="r">
-        <animate attributeName="seed" values="2;8;14;5;11;2" dur="5s" repeatCount="indefinite"/>
-      </feTurbulence>
-      <feDisplacementMap in="SourceGraphic" in2="r" scale="9" xChannelSelector="R" yChannelSelector="B"/>
-    </filter>
-    <filter id="ve-filter-heat" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="4" result="h">
-        <animate attributeName="baseFrequency" values="0.04;0.055;0.042" dur="3.5s" repeatCount="indefinite"/>
-      </feTurbulence>
-      <feDisplacementMap in="SourceGraphic" in2="h" scale="5" xChannelSelector="R" yChannelSelector="G"/>
-      <feGaussianBlur stdDeviation="0.35"/>
-    </filter>
-  </defs>
-</svg>
-`;
-
 /**
- * Aperçu web : CSS + filtres SVG (pas de WebGL pour rester léger).
- * Effets type apps pro : mesh, verre, liquify, VHS, aurore, 3D, etc.
+ * Liste alignée sur l’export FFmpeg (adGenerator) — pas d’effets SVG / filtres exotiques.
  */
 const MOTION_PRESETS: Array<{ key: string; label: string; subtitle: string }> =
   [
-    { key: "none", label: "Aucun", subtitle: "Sans effet" },
-    {
-      key: "halo",
-      label: "Halo sujet",
-      subtitle: "Aura centrale type portrait",
-    },
-    { key: "rimlight", label: "Liseré", subtitle: "Balayage lumière" },
-    { key: "bloom", label: "Bloom", subtitle: "Halation ciné" },
-    { key: "dream", label: "Rêve", subtitle: "Vignette & douceur" },
-    { key: "mesh", label: "Mesh", subtitle: "Dégradés fluides 2025" },
-    { key: "sheen", label: "Sheen", subtitle: "Reflet métal / verre" },
-    { key: "holo", label: "Hologramme", subtitle: "Irisé mouvant" },
-    {
-      key: "lensflare",
-      label: "Lens flare",
-      subtitle: "Faux flare anamorphique",
-    },
-    { key: "glass", label: "Verre dépoli", subtitle: "Frosted + saturation" },
-    { key: "aurora", label: "Aurore", subtitle: "Bandes boréales" },
-    { key: "dopamine", label: "Dopamine", subtitle: "Énergie réseaux sociaux" },
-    { key: "prism", label: "Prisme", subtitle: "Conique irisé" },
-    { key: "chromatic", label: "RGB split", subtitle: "Franges couleur" },
-    { key: "stardust", label: "Étoiles", subtitle: "Poussière lumineuse" },
-    { key: "electric", label: "Électrique", subtitle: "Néon bords" },
-    { key: "neongrid", label: "Grille néon", subtitle: "Perspective cyber" },
-    { key: "liquid", label: "Fluide", subtitle: "Clip organique" },
-    { key: "scan", label: "Scanline", subtitle: "Rayon lumineux" },
-    { key: "vhs", label: "VHS", subtitle: "Analogique dégradé" },
-    { key: "noir", label: "Neo-noir", subtitle: "Contraste ciné" },
-    { key: "cinematic", label: "Cinémascope", subtitle: "Bandes noires" },
-    { key: "aqua", label: "Underwater", subtitle: "Aquatique ondulant" },
-    { key: "iris", label: "Iris", subtitle: "Ouverture diaphragme" },
-    { key: "tilt3d", label: "Tilt 3D", subtitle: "Perspective douce" },
-    { key: "pulseblur", label: "Pulse blur", subtitle: "Respiration floue" },
-    { key: "chromawave", label: "Chromawave", subtitle: "Vague de teinte" },
-    { key: "liquify", label: "Liquify", subtitle: "Déformation fluide (SVG)" },
-    { key: "ripple", label: "Ripple", subtitle: "Ondulation surface" },
-    { key: "heat", label: "Heat haze", subtitle: "Chaleur / mirage" },
+    { key: "none", label: "Aucun", subtitle: "Sans animation" },
     { key: "kenburns", label: "Zoom lent", subtitle: "Ken Burns" },
     { key: "zoomout", label: "Ouverture", subtitle: "Zoom arrière" },
+    { key: "drift", label: "Dérive", subtitle: "Pan lent" },
     { key: "beat", label: "Beat", subtitle: "Pulsation" },
     { key: "pop", label: "Pop", subtitle: "Impact" },
-    { key: "drift", label: "Dérive", subtitle: "Pan lent" },
-    { key: "glitch", label: "Glitch", subtitle: "Numérique" },
+    { key: "iris", label: "Iris", subtitle: "Ouverture diaphragme" },
+    { key: "dream", label: "Rêve", subtitle: "Vignette & douceur" },
+    { key: "vhs", label: "VHS", subtitle: "Analogique" },
+    { key: "noir", label: "Neo-noir", subtitle: "Contraste" },
+    { key: "glitch", label: "Glitch", subtitle: "Bruit numérique" },
   ];
 
-/** Mouvements prioritaires (lo-fi / ciné) — le reste sous « Autres ». */
-const LOFI_MOTION_KEYS = new Set([
-  "none",
-  "halo",
-  "rimlight",
-  "bloom",
-  "dream",
-  "mesh",
-  "sheen",
-  "glass",
-  "aurora",
-  "vhs",
-  "noir",
-  "cinematic",
-  "aqua",
-  "pulseblur",
-  "drift",
-  "kenburns",
-  "zoomout",
-]);
-
-const MOTION_PRESETS_LOFI = MOTION_PRESETS.filter((m) =>
-  LOFI_MOTION_KEYS.has(m.key),
-);
-const MOTION_PRESETS_OTHER = MOTION_PRESETS.filter(
-  (m) => !LOFI_MOTION_KEYS.has(m.key),
-);
+const ALLOWED_MOTION_KEYS = new Set(MOTION_PRESETS.map((m) => m.key));
 
 const MOTION_CSS = `
-@keyframes ve-kenburns {
-  0% { transform: scale(1) translate(0, 0); }
-  100% { transform: scale(1.1) translate(-2%, -1.5%); }
-}
-@keyframes ve-zoomout {
-  0% { transform: scale(1.12); }
-  100% { transform: scale(1); }
-}
-@keyframes ve-beat {
-  0%, 100% { transform: scale(1); }
-  8% { transform: scale(1.06); }
-  16% { transform: scale(1); }
-  24% { transform: scale(1.04); }
-  32% { transform: scale(1); }
-}
-@keyframes ve-pop {
-  0%, 100% { transform: scale(1); }
-  12% { transform: scale(1.09); }
-  24% { transform: scale(0.98); }
-  36% { transform: scale(1); }
-}
-@keyframes ve-drift {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(4%, 2%); }
-}
-@keyframes ve-glitch {
-  0%, 88%, 100% { transform: translate(0); filter: hue-rotate(0deg); }
-  90% { transform: translate(-4px, 2px); filter: hue-rotate(72deg) saturate(1.4); }
-  92% { transform: translate(4px, -2px); filter: hue-rotate(-36deg); }
-  94% { transform: translate(-2px); filter: hue-rotate(18deg); }
-}
-@keyframes ve-halo-pulse {
-  0%, 100% { opacity: 0.75; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.07); }
-}
-@keyframes ve-rim-move {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
-}
-@keyframes ve-bloom-pulse {
-  0%, 100% { opacity: 0.5; transform: scale(1); filter: blur(0px); }
-  50% { opacity: 0.95; transform: scale(1.12); filter: blur(1px); }
-}
-@keyframes ve-dream-pulse {
-  0%, 100% { opacity: 0.65; }
-  50% { opacity: 1; }
-}
-@keyframes ve-prism-spin {
-  to { transform: rotate(360deg); }
-}
-@keyframes ve-chromatic {
-  0%, 100% { filter: drop-shadow(2px 0 0 rgba(255,0,100,0.35)) drop-shadow(-2px 0 0 rgba(0,255,255,0.35)); }
-  50% { filter: drop-shadow(-3px 0 0 rgba(255,0,100,0.4)) drop-shadow(3px 0 0 rgba(0,255,255,0.4)); }
-}
-@keyframes ve-stardust {
-  0% { background-position: 0% 0%, 100% 100%, 50% 30%, 80% 70%; }
-  100% { background-position: 100% 100%, 0% 0%, 70% 60%, 20% 40%; }
-}
-@keyframes ve-electric {
-  0%, 100% {
-    box-shadow: inset 0 0 28px rgba(0, 210, 255, 0.38), inset 0 0 10px rgba(160, 80, 255, 0.28);
-  }
-  50% {
-    box-shadow: inset 0 0 48px rgba(255, 80, 200, 0.5), inset 0 0 16px rgba(0, 255, 200, 0.4);
-  }
-}
-@keyframes ve-liquid-shape {
-  0%, 100% { clip-path: inset(2% 3% 2% 3% round 10px); }
-  33% { clip-path: inset(3% 2% 3% 2% round 14px 6px); }
-  66% { clip-path: inset(1% 4% 2% 4% round 8px 12px); }
-}
-@keyframes ve-scan {
-  0% { transform: translateY(-120%); }
-  100% { transform: translateY(120%); }
-}
-@keyframes ve-mesh-drift {
-  0%, 100% { background-position: 0% 0%, 100% 0%, 50% 100%, 0% 50%; filter: hue-rotate(0deg); }
-  50% { background-position: 100% 100%, 0% 100%, 50% 0%, 100% 50%; filter: hue-rotate(12deg); }
-}
-@keyframes ve-sheen {
-  0% { background-position: -80% 0; }
-  100% { background-position: 180% 0; }
-}
-@keyframes ve-holo-shift {
-  0% { background-position: 0% 40%; filter: hue-rotate(0deg) saturate(1.2); }
-  33% { background-position: 100% 60%; filter: hue-rotate(25deg) saturate(1.35); }
-  66% { background-position: 50% 0%; filter: hue-rotate(-15deg) saturate(1.25); }
-  100% { background-position: 0% 40%; filter: hue-rotate(0deg) saturate(1.2); }
-}
-@keyframes ve-flare-shift {
-  0%, 100% { opacity: 0.85; transform: scale(1) translate(0, 0); }
-  50% { opacity: 1; transform: scale(1.03) translate(-1%, 1%); }
-}
-@keyframes ve-glass-shine {
-  0%, 100% { opacity: 0.92; }
-  50% { opacity: 1; }
-}
-@keyframes ve-aurora {
-  0%, 100% { transform: translateY(4%) scale(1); opacity: 0.8; }
-  50% { transform: translateY(-10%) scale(1.06); opacity: 1; }
-}
-@keyframes ve-dopamine {
-  0%, 100% { transform: scale(1); filter: saturate(1) brightness(1); }
-  35% { transform: scale(1.06); filter: saturate(1.4) brightness(1.04); }
-  70% { transform: scale(1.02); filter: saturate(1.2) brightness(1.02); }
-}
-@keyframes ve-vhs-roll {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(14px); }
-}
-@keyframes ve-noir-pulse {
-  0%, 100% { opacity: 0.88; }
-  50% { opacity: 1; }
-}
-@keyframes ve-grid-pulse {
-  0%, 100% { opacity: 0.75; filter: brightness(1); }
-  50% { opacity: 1; filter: brightness(1.15); }
-}
-@keyframes ve-aqua-wave {
-  0% { transform: translateY(0) skewX(0deg); }
-  50% { transform: translateY(-6px) skewX(0.8deg); }
-  100% { transform: translateY(0) skewX(0deg); }
-}
-@keyframes ve-iris-clip {
-  0%, 100% { clip-path: circle(94% at 50% 50%); }
-  50% { clip-path: circle(76% at 50% 49%); }
-}
-@keyframes ve-tilt3d {
-  0%, 100% { transform: rotateX(0deg) rotateY(0deg) translateZ(0); }
-  20% { transform: rotateX(2.2deg) rotateY(-5deg) translateZ(10px); }
-  45% { transform: rotateX(-1.2deg) rotateY(4deg) translateZ(6px); }
-  70% { transform: rotateX(1.5deg) rotateY(3.5deg) translateZ(8px); }
-}
-@keyframes ve-pulseblur {
-  0%, 100% { filter: blur(0px) brightness(1); }
-  50% { filter: blur(0.85px) brightness(1.03); }
-}
-@keyframes ve-chromawave {
-  0% { filter: hue-rotate(0deg) saturate(1.15); }
-  50% { filter: hue-rotate(40deg) saturate(1.35); }
-  100% { filter: hue-rotate(0deg) saturate(1.15); }
-}
-
-.ve-motion--tilt3d {
-  perspective: 440px;
-  perspective-origin: 50% 42%;
-}
+/* Une seule div.ve-motion-inner.ve-motion--* : meilleure prise en charge RN Web + navigateurs */
 .ve-motion-inner {
   width: 100%;
   height: 100%;
@@ -294,360 +54,119 @@ const MOTION_CSS = `
   justify-content: center;
   position: relative;
 }
-
-.ve-motion--kenburns .ve-motion-inner { animation: ve-kenburns 7s ease-in-out infinite alternate; }
-.ve-motion--zoomout .ve-motion-inner { animation: ve-zoomout 6s ease-in-out infinite alternate; }
-.ve-motion--beat .ve-motion-inner { animation: ve-beat 1.8s ease-in-out infinite; }
-.ve-motion--pop .ve-motion-inner { animation: ve-pop 2s ease-in-out infinite; }
-.ve-motion--drift .ve-motion-inner { animation: ve-drift 10s ease-in-out infinite; }
-.ve-motion--glitch .ve-motion-inner { animation: ve-glitch 2.5s steps(1, end) infinite; }
-.ve-motion--chromatic .ve-motion-inner { animation: ve-chromatic 0.15s linear infinite; }
-.ve-motion--electric .ve-motion-inner { animation: ve-electric 2s ease-in-out infinite; }
-.ve-motion--liquid .ve-motion-inner { animation: ve-liquid-shape 7s ease-in-out infinite; }
-.ve-motion--tilt3d .ve-motion-inner {
-  animation: ve-tilt3d 9s ease-in-out infinite;
-  transform-style: preserve-3d;
-  will-change: transform;
+.ve-motion-inner[class*="ve-motion--"] {
+  will-change: transform, filter, clip-path;
+  backface-visibility: hidden;
 }
-.ve-motion--iris .ve-motion-inner { animation: ve-iris-clip 5.5s ease-in-out infinite; }
-.ve-motion--pulseblur .ve-motion-inner { animation: ve-pulseblur 2.8s ease-in-out infinite; }
-.ve-motion--chromawave .ve-motion-inner { animation: ve-chromawave 6s ease-in-out infinite; }
-
-.ve-motion--halo .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: -8%;
-  z-index: 4;
-  pointer-events: none;
-  background: radial-gradient(ellipse 52% 48% at 50% 44%,
-    rgba(255, 252, 235, 0.5) 0%,
-    rgba(255, 200, 160, 0.18) 38%,
-    transparent 72%);
-  mix-blend-mode: screen;
-  animation: ve-halo-pulse 2.8s ease-in-out infinite;
+@keyframes ve-kenburns {
+  0% { transform: scale(1) translate(0, 0); }
+  100% { transform: scale(1.14) translate(-2.5%, -2%); }
 }
-.ve-motion--rimlight .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  pointer-events: none;
-  background: linear-gradient(
-    125deg,
-    transparent 0%,
-    transparent 35%,
-    rgba(255, 255, 255, 0.22) 48%,
-    rgba(180, 230, 255, 0.15) 52%,
-    transparent 65%,
-    transparent 100%
-  );
-  background-size: 220% 220%;
-  animation: ve-rim-move 5s linear infinite;
-  mix-blend-mode: overlay;
+@keyframes ve-zoomout {
+  0% { transform: scale(1.14); }
+  100% { transform: scale(1); }
 }
-.ve-motion--bloom .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: -15%;
-  z-index: 4;
-  pointer-events: none;
-  background: radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.55) 0%, transparent 55%);
-  mix-blend-mode: screen;
-  animation: ve-bloom-pulse 3s ease-in-out infinite;
+@keyframes ve-beat {
+  0%, 100% { transform: scale(1); }
+  8% { transform: scale(1.08); }
+  16% { transform: scale(1); }
+  24% { transform: scale(1.055); }
+  32% { transform: scale(1); }
 }
-.ve-motion--dream .ve-motion-inner::after {
+@keyframes ve-pop {
+  0%, 100% { transform: scale(1); }
+  12% { transform: scale(1.11); }
+  24% { transform: scale(0.97); }
+  36% { transform: scale(1); }
+}
+@keyframes ve-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(5%, 2.5%); }
+}
+@keyframes ve-glitch {
+  0%, 88%, 100% { transform: translate(0); filter: hue-rotate(0deg); }
+  90% { transform: translate(-5px, 3px); filter: hue-rotate(72deg) saturate(1.45); }
+  92% { transform: translate(5px, -3px); filter: hue-rotate(-36deg); }
+  94% { transform: translate(-3px); filter: hue-rotate(18deg); }
+}
+@keyframes ve-dream-zoom {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.07); }
+}
+@keyframes ve-dream-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@keyframes ve-vhs-roll {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(18px); }
+}
+@keyframes ve-noir-pulse {
+  0%, 100% { opacity: 0.82; }
+  50% { opacity: 1; }
+}
+@keyframes ve-iris-clip {
+  0%, 100% { clip-path: circle(92% at 50% 50%); }
+  50% { clip-path: circle(72% at 50% 49%); }
+}
+.ve-motion-inner.ve-motion--kenburns { animation: ve-kenburns 5.5s ease-in-out infinite alternate; }
+.ve-motion-inner.ve-motion--zoomout { animation: ve-zoomout 5s ease-in-out infinite alternate; }
+.ve-motion-inner.ve-motion--beat { animation: ve-beat 1.65s ease-in-out infinite; }
+.ve-motion-inner.ve-motion--pop { animation: ve-pop 1.85s ease-in-out infinite; }
+.ve-motion-inner.ve-motion--drift { animation: ve-drift 8s ease-in-out infinite; }
+.ve-motion-inner.ve-motion--glitch { animation: ve-glitch 2.2s steps(1, end) infinite; }
+.ve-motion-inner.ve-motion--iris { animation: ve-iris-clip 4.5s ease-in-out infinite; }
+.ve-motion-inner.ve-motion--dream { animation: ve-dream-zoom 7s ease-in-out infinite alternate; }
+.ve-motion-inner.ve-motion--dream::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 4;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 90% 80% at 50% 50%, transparent 25%, rgba(60, 40, 100, 0.35) 100%),
-    radial-gradient(ellipse 50% 40% at 50% 40%, rgba(255, 220, 200, 0.12) 0%, transparent 70%);
+    radial-gradient(ellipse 90% 80% at 50% 50%, transparent 22%, rgba(60, 40, 100, 0.42) 100%),
+    radial-gradient(ellipse 50% 40% at 50% 38%, rgba(255, 220, 200, 0.16) 0%, transparent 70%);
   mix-blend-mode: soft-light;
-  animation: ve-dream-pulse 5s ease-in-out infinite;
+  animation: ve-dream-pulse 4s ease-in-out infinite;
 }
-.ve-motion--prism .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: -25%;
-  z-index: 4;
-  pointer-events: none;
-  background: conic-gradient(
-    from 0deg at 50% 50%,
-    transparent 0deg,
-    rgba(255, 0, 128, 0.12) 60deg,
-    transparent 120deg,
-    rgba(0, 255, 255, 0.1) 200deg,
-    transparent 280deg,
-    rgba(255, 200, 0, 0.08) 320deg,
-    transparent 360deg
-  );
-  animation: ve-prism-spin 10s linear infinite;
-  mix-blend-mode: overlay;
-}
-.ve-motion--stardust .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  pointer-events: none;
-  opacity: 0.75;
-  background-image:
-    radial-gradient(1.5px 1.5px at 15% 25%, rgba(255,255,255,0.95), transparent),
-    radial-gradient(1.5px 1.5px at 85% 15%, rgba(200,230,255,0.9), transparent),
-    radial-gradient(2px 2px at 70% 75%, rgba(255,200,255,0.85), transparent),
-    radial-gradient(1.5px 1.5px at 40% 80%, rgba(255,255,220,0.9), transparent),
-    radial-gradient(2px 2px at 55% 35%, rgba(180,255,255,0.8), transparent);
-  background-size: 100% 100%;
-  background-repeat: repeat;
-  animation: ve-stardust 12s linear infinite;
-  mix-blend-mode: screen;
-}
-.ve-motion--scan .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 28%;
-  top: -28%;
-  z-index: 4;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    rgba(255, 255, 255, 0.07) 45%,
-    rgba(100, 200, 255, 0.06) 50%,
-    transparent 55%
-  );
-  animation: ve-scan 3.2s linear infinite;
-  mix-blend-mode: screen;
-}
-
-.ve-motion--mesh .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: -12%;
-  z-index: 4;
-  pointer-events: none;
-  opacity: 0.88;
-  background:
-    radial-gradient(at 22% 28%, rgba(99, 102, 241, 0.38) 0px, transparent 52%),
-    radial-gradient(at 78% 18%, rgba(236, 72, 153, 0.34) 0px, transparent 48%),
-    radial-gradient(at 48% 82%, rgba(34, 211, 238, 0.32) 0px, transparent 42%),
-    radial-gradient(at 8% 72%, rgba(168, 85, 247, 0.28) 0px, transparent 55%),
-    radial-gradient(at 92% 65%, rgba(251, 191, 36, 0.2) 0px, transparent 50%);
-  background-size: 200% 200%;
-  animation: ve-mesh-drift 20s ease-in-out infinite;
-  mix-blend-mode: hard-light;
-}
-.ve-motion--sheen .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  pointer-events: none;
-  background: linear-gradient(
-    105deg,
-    transparent 0%,
-    transparent 42%,
-    rgba(255, 255, 255, 0.22) 50%,
-    transparent 58%,
-    transparent 100%
-  );
-  background-size: 220% 100%;
-  animation: ve-sheen 3.8s ease-in-out infinite;
-  mix-blend-mode: overlay;
-}
-.ve-motion--holo .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: -5%;
-  z-index: 4;
-  pointer-events: none;
-  opacity: 0.42;
-  background: linear-gradient(
-    130deg,
-    rgba(255, 0, 128, 0.35),
-    rgba(255, 140, 0, 0.25),
-    rgba(64, 224, 208, 0.3),
-    rgba(121, 40, 202, 0.35),
-    rgba(255, 0, 128, 0.35)
-  );
-  background-size: 400% 400%;
-  animation: ve-holo-shift 6s ease-in-out infinite;
-  mix-blend-mode: overlay;
-}
-.ve-motion--lensflare .ve-motion-inner::before {
+.ve-motion-inner.ve-motion--vhs::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  background:
-    linear-gradient(124deg, transparent 32%, rgba(255, 255, 255, 0.12) 40%, transparent 46%),
-    radial-gradient(ellipse 90% 50% at 74% 26%, rgba(255, 248, 220, 0.5) 0%, transparent 62%);
-  mix-blend-mode: screen;
-  animation: ve-flare-shift 7s ease-in-out infinite;
-}
-.ve-motion--lensflare .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  width: 18%;
-  height: 18%;
-  top: 16%;
-  right: 18%;
-  z-index: 4;
-  pointer-events: none;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.55) 0%, rgba(255, 200, 120, 0.15) 40%, transparent 70%);
-  mix-blend-mode: screen;
-  filter: blur(0.5px);
-  animation: ve-flare-shift 7s ease-in-out infinite reverse;
-}
-.ve-motion--glass .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  pointer-events: none;
-  backdrop-filter: blur(16px) saturate(1.45);
-  -webkit-backdrop-filter: blur(16px) saturate(1.45);
-  background: linear-gradient(
-    168deg,
-    rgba(255, 255, 255, 0.18) 0%,
-    rgba(255, 255, 255, 0.03) 38%,
-    rgba(255, 255, 255, 0.1) 100%
-  );
-  animation: ve-glass-shine 5.5s ease-in-out infinite;
-  mix-blend-mode: soft-light;
-}
-.ve-motion--aurora .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: -5%;
-  z-index: 4;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 110% 45% at 28% 100%, rgba(0, 255, 200, 0.28), transparent),
-    radial-gradient(ellipse 90% 40% at 72% 100%, rgba(140, 80, 255, 0.26), transparent),
-    radial-gradient(ellipse 70% 35% at 50% 100%, rgba(255, 120, 200, 0.18), transparent);
-  animation: ve-aurora 10s ease-in-out infinite;
-  mix-blend-mode: screen;
-}
-.ve-motion--dopamine .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: -8%;
-  z-index: 4;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 45%, rgba(255, 230, 120, 0.35) 0%, transparent 58%),
-    conic-gradient(from 180deg at 50% 120%, rgba(255, 60, 180, 0.12), transparent, rgba(60, 200, 255, 0.1));
-  mix-blend-mode: overlay;
-  animation: ve-dopamine 1.35s ease-in-out infinite;
-}
-.ve-motion--neongrid .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(0, 255, 210, 0.09) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 0, 200, 0.07) 1px, transparent 1px);
-  background-size: 32px 32px;
-  transform-origin: center bottom;
-  transform: perspective(280px) rotateX(12deg) scale(1.08);
-  animation: ve-grid-pulse 3.2s ease-in-out infinite;
-  mix-blend-mode: screen;
-  mask-image: linear-gradient(to top, black 55%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to top, black 55%, transparent 100%);
-}
-.ve-motion--vhs .ve-motion-inner::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  opacity: 0.45;
+  opacity: 0.5;
   background: repeating-linear-gradient(
     0deg,
-    rgba(0, 0, 0, 0.12) 0px,
-    rgba(0, 0, 0, 0.12) 1px,
+    rgba(0, 0, 0, 0.14) 0px,
+    rgba(0, 0, 0, 0.14) 1px,
     transparent 1px,
     transparent 3px
   );
   mix-blend-mode: multiply;
 }
-.ve-motion--vhs .ve-motion-inner::after {
+.ve-motion-inner.ve-motion--vhs::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 4;
   pointer-events: none;
-  box-shadow: inset 0 0 50px rgba(255, 0, 90, 0.06);
-  background: linear-gradient(180deg, rgba(80, 120, 255, 0.05) 0%, transparent 25%, transparent 78%, rgba(255, 50, 80, 0.04) 100%);
-  animation: ve-vhs-roll 4.5s linear infinite;
+  box-shadow: inset 0 0 50px rgba(255, 0, 90, 0.08);
+  background: linear-gradient(180deg, rgba(80, 120, 255, 0.07) 0%, transparent 25%, transparent 78%, rgba(255, 50, 80, 0.06) 100%);
+  animation: ve-vhs-roll 3.8s linear infinite;
   mix-blend-mode: screen;
 }
-.ve-motion--noir .ve-motion-inner::after {
+.ve-motion-inner.ve-motion--noir::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 4;
   pointer-events: none;
-  background: radial-gradient(ellipse 95% 85% at 50% 32%, transparent 18%, rgba(0, 0, 0, 0.72) 100%);
+  background: radial-gradient(ellipse 95% 85% at 50% 30%, transparent 14%, rgba(0, 0, 0, 0.78) 100%);
   mix-blend-mode: multiply;
-  animation: ve-noir-pulse 5s ease-in-out infinite;
+  animation: ve-noir-pulse 4s ease-in-out infinite;
 }
-.ve-motion--cinematic .ve-motion-inner::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0.62) 0%,
-    rgba(0, 0, 0, 0.62) 11%,
-    transparent 11.2%,
-    transparent 88.8%,
-    rgba(0, 0, 0, 0.62) 89%,
-    rgba(0, 0, 0, 0.62) 100%
-  );
-  mix-blend-mode: multiply;
-}
-.ve-motion--aqua .ve-motion-inner::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  opacity: 0.55;
-  background: repeating-linear-gradient(
-    92deg,
-    transparent,
-    transparent 18px,
-    rgba(0, 160, 200, 0.04) 19px,
-    rgba(0, 160, 200, 0.04) 20px
-  );
-  mix-blend-mode: soft-light;
-  animation: ve-aqua-wave 5s ease-in-out infinite;
-}
-.ve-motion--aqua .ve-motion-inner::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 100% 55% at 50% 100%, rgba(0, 140, 180, 0.22) 0%, transparent 55%),
-    linear-gradient(180deg, rgba(0, 80, 120, 0.08) 0%, transparent 40%);
-  mix-blend-mode: color-dodge;
-  animation: ve-aqua-wave 7s ease-in-out infinite reverse;
-}
-`;
+`
 
 export interface VideoEditorSettings {
   filterPreset: string;
@@ -690,6 +209,16 @@ export const DEFAULT_EDITOR_SETTINGS: VideoEditorSettings = {
   endCardShowTitle: true,
   endCardCoverUrl: "",
 };
+
+export function sanitizeEditorSettings(
+  partial: Partial<VideoEditorSettings> | null | undefined,
+): VideoEditorSettings {
+  const merged: VideoEditorSettings = { ...DEFAULT_EDITOR_SETTINGS, ...partial };
+  if (!ALLOWED_MOTION_KEYS.has(merged.motionPreset)) {
+    merged.motionPreset = DEFAULT_EDITOR_SETTINGS.motionPreset;
+  }
+  return merged;
+}
 
 interface FilterPreset {
   key: string;
@@ -904,40 +433,15 @@ const TAB_DEFS: Array<{
 function motionIconFor(key: string): keyof typeof Ionicons.glyphMap {
   const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
     none: "close-circle-outline",
-    halo: "sunny-outline",
-    rimlight: "flash-outline",
-    bloom: "sparkles",
-    dream: "cloud-outline",
-    mesh: "grid-outline",
-    sheen: "diamond-outline",
-    holo: "color-wand-outline",
-    lensflare: "radio-outline",
-    glass: "layers-outline",
-    aurora: "partly-sunny-outline",
-    dopamine: "heart-outline",
-    prism: "triangle-outline",
-    chromatic: "aperture-outline",
-    stardust: "star-outline",
-    electric: "flash-outline",
-    neongrid: "apps-outline",
-    liquid: "water-outline",
-    scan: "scan-outline",
-    vhs: "videocam-outline",
-    noir: "contrast-outline",
-    cinematic: "film-outline",
-    aqua: "rainy-outline",
-    iris: "eye-outline",
-    tilt3d: "cube-outline",
-    pulseblur: "water-outline",
-    chromawave: "pulse-outline",
-    liquify: "git-network-outline",
-    ripple: "radio-button-on-outline",
-    heat: "flame-outline",
     kenburns: "expand-outline",
     zoomout: "contract-outline",
+    drift: "navigate-outline",
     beat: "musical-notes-outline",
     pop: "rocket-outline",
-    drift: "navigate-outline",
+    iris: "eye-outline",
+    dream: "cloud-outline",
+    vhs: "videocam-outline",
+    noir: "contrast-outline",
     glitch: "bug-outline",
   };
   return icons[key] ?? "sparkles-outline";
@@ -986,22 +490,6 @@ export function VideoEditorStep({
       document.head.appendChild(styleEl);
     }
     styleEl.textContent = MOTION_CSS;
-
-    if (!document.getElementById(SVG_FILTERS_ROOT_ID)) {
-      const root = document.createElement("div");
-      root.id = SVG_FILTERS_ROOT_ID;
-      root.setAttribute("aria-hidden", "true");
-      root.innerHTML = SVG_FILTERS_HTML;
-      Object.assign(root.style, {
-        position: "absolute",
-        width: "0",
-        height: "0",
-        overflow: "hidden",
-        clipPath: "inset(50%)",
-        pointerEvents: "none",
-      });
-      document.body.appendChild(root);
-    }
   }, []);
 
   const captureFrame = useCallback(() => {
@@ -1087,12 +575,14 @@ export function VideoEditorStep({
         }
       : null;
 
-  const motionWrapClass =
+  const motionInnerClass = [
+    "ve-motion-inner",
     settings.motionPreset && settings.motionPreset !== "none"
       ? `ve-motion--${settings.motionPreset}`
-      : "";
-
-  const svgSurfaceFilter = SVG_FILTER_BY_MOTION[settings.motionPreset] ?? "";
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const videoSurface = (
     <>
@@ -1117,42 +607,19 @@ export function VideoEditorStep({
     </>
   );
 
-  const videoInner = svgSurfaceFilter
-    ? React.createElement(
-        "div",
-        {
-          style: {
-            width: "100%",
-            height: "100%",
-            position: "relative" as const,
-            filter: svgSurfaceFilter,
-            isolation: "isolate" as const,
-          },
-        },
-        videoSurface,
-      )
-    : videoSurface;
-
   const previewFrameInner = (
     <>
       {React.createElement(
         "div",
         {
-          className: motionWrapClass || undefined,
+          className: motionInnerClass,
           style: {
             width: "100%",
             height: "100%",
             position: "relative" as const,
           },
         },
-        React.createElement(
-          "div",
-          {
-            className: "ve-motion-inner",
-            style: { width: "100%", height: "100%" },
-          },
-          videoInner,
-        ),
+        videoSurface,
       )}
       {settings.text.length > 0 && (
         <View
@@ -1423,21 +890,10 @@ export function VideoEditorStep({
   const motionPanel = (
     <View style={[styles.tabPanel, styles.tabPanelFill]}>
       <Text style={[styles.fxSectionTitle, { color: colors.textMuted }]}>
-        Lo-fi & ciné
+        Animations (même rendu qu’à l’export)
       </Text>
       <View style={styles.fxGrid}>
-        {renderMotionTiles(MOTION_PRESETS_LOFI)}
-      </View>
-      <Text
-        style={[
-          styles.fxSectionTitle,
-          { color: colors.textMuted, marginTop: spacing.lg },
-        ]}
-      >
-        Autres
-      </Text>
-      <View style={styles.fxGrid}>
-        {renderMotionTiles(MOTION_PRESETS_OTHER)}
+        {renderMotionTiles(MOTION_PRESETS)}
       </View>
       <View
         style={[
@@ -1451,8 +907,8 @@ export function VideoEditorStep({
           color={colors.textMuted}
         />
         <Text style={[styles.fxFootnoteText, { color: colors.textMuted }]}>
-          Animations : aperçu web · l’export applique filtres couleur, grain et
-          fin de clip (cover).
+          Mouvements et effets listés ici sont ceux encodés en FFmpeg (zoom,
+          vignette, grain, contraste).
         </Text>
       </View>
     </View>
